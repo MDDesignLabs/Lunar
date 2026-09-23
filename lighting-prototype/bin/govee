@@ -1,0 +1,25 @@
+#!/bin/bash
+# govee: talk to Govee strips over the LAN API from the shell.
+#
+#   govee discover [secs]          scan (multicast :4001) and print replies received on :4002
+#   govee on|off <ip>
+#   govee brightness <ip> <1-100>
+#   govee kelvin <ip> <K>
+#   govee rgb <ip> <r> <g> <b>
+#   govee status <ip>              asks for devStatus (the reply arrives on :4002; use `discover` to see it)
+#   govee raw <ip> '<json>'
+
+. "$(dirname "$0")/../lib/common.sh"
+. "$PROTO_DIR/lib/govee.sh"
+
+case "$1" in
+    discover)   govee_discover "${2:-3}" ;;
+    on)         govee_turn "$2" 1 ;;
+    off)        govee_turn "$2" 0 ;;
+    brightness) govee_brightness "$2" "$3" ;;
+    kelvin)     govee_kelvin "$2" "$3" ;;
+    rgb)        govee_rgb "$2" "$3" "$4" "$5" ;;
+    status)     govee_status "$2" ;;
+    raw)        govee_send "$2" "$3" ;;
+    *)          sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 64 ;;
+esac

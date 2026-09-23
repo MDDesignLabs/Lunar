@@ -1,0 +1,18 @@
+#!/bin/bash
+# Mock m1ddc: records every call; keeps per-control values in $MOCK_DIR.
+# MOCK_FAIL=1 makes writes fail (display asleep / DDC error).
+echo "m1ddc $*" >> "$MOCK_DIR/calls.log"
+[ "$1" = display ] && shift 2
+case "$1" in
+    set)
+        [ "$MOCK_FAIL" = 1 ] && exit 1
+        # MOCK_DROP_SINGLE=1: a monitor that ignores every other single-sent write
+        if [ "$(basename "$0")" = m1ddc-1x ] && [ "$MOCK_DROP_SINGLE" = 1 ]; then
+            n=$(( $(cat "$MOCK_DIR/drop_n" 2>/dev/null || echo 0) + 1 )); echo $n > "$MOCK_DIR/drop_n"
+            [ $((n % 2)) = 0 ] && exit 0
+        fi
+        echo "$3" > "$MOCK_DIR/m1ddc_$2" ;;
+    get) cat "$MOCK_DIR/m1ddc_$2" 2>/dev/null || echo 50 ;;
+    max) echo 100 ;;
+    display) echo "[1] CU34G4Z (mock)" ;;
+esac

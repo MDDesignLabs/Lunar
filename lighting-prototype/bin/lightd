@@ -1,0 +1,122 @@
+#!/bin/bash
+# lightd: the adaptive loop. Run in a terminal to watch it, or via launchd (see ../launchd).
+#
+#   lux (Lunar or ESP32 SSE) → log-domain EMA → dead-band → targets → rate-limited DDC + Govee
+#
+# Stops holding outputs (never snaps to defaults) when the sensor goes quiet,
+# detects wake from sleep by a gap between samples, and re-sends once after wake.
+
+. "$(dirname "$0")/../lib/common.sh"
+. "$PROTO_DIR/lib/ddc.sh"
+. "$PROTO_DIR/lib/govee.sh"
+. "$PROTO_DIR/lib/apply.sh"
+
+WAKE_GAP="${WAKE_GAP:-90}"        # seconds without a sample that count as "we were asleep"
+WAKE_DELAY="${WAKE_DELAY:-8}"     # wait this long after wake before touching DDC
+NEUTRAL_ON_EXIT="${NEUTRAL_ON_EXIT:-1}"
+
+FIFO="$STATE/lux.fifo"
+STREAM_PID=""
+
+lux_stream() {
+    case "$LUX_SOURCE" in
+        lunar) exec "$LUNAR" lux --listen ;;
+        sse)
+            # Parse in bash, not awk: awk implementations may block-buffer piped
+            # input, which would delay every lux sample by kilobytes of events.
+            curl -sN --connect-timeout 5 -H 'Accept: text/event-stream' "$SENSOR_URL" \
+                | while IFS= read -r line; do
+                    case "$line" in
+                        data:*"\"id\":\"$SENSOR_ID\""*)
+                            v="${line#*\"value\":}"; v="${v%%[,\}]*}"
+                            echo "$v" ;;
+                    esac
+                done
+            ;;
+    esac
+}
+
+kill_tree() {
+    local p
+    for p in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$p"; done
+    kill "$1" 2>/dev/null
+}
+
+cleanup() {
+    [ -n "$STREAM_PID" ] && kill_tree "$STREAM_PID"
+    rm -f "$FIFO"
+    if [ "$NEUTRAL_ON_EXIT" = 1 ]; then
+        log "exit: writing neutral gains so the monitor isn't left warm"
+        IFS=: read -r r g b <<EOF
+$CRITICAL_GAINS
+EOF
+        ddc_gains "$r" "$g" "$b" 1
+    fi
+    state_set running 0
+    exit 0
+}
+trap cleanup INT TERM
+
+if [ "$(state_get running 0)" = 1 ]; then
+    log "previous run did not exit cleanly; resetting gains to neutral first"
+    ddc_invalidate
+    IFS=: read -r r g b <<EOF
+$CRITICAL_GAINS
+EOF
+    ddc_gains "$r" "$g" "$b" 1
+fi
+state_set running 1
+log "lightd start: backend=$BACKEND lux=$LUX_SOURCE mode=$(current_mode)"
+
+prev_lf="$(state_get filtered "")"
+acted_lf="$(state_get acted "")"
+acted_mode=""
+last_t="$(now)"
+backoff=1
+
+while true; do
+    rm -f "$FIFO"; mkfifo "$FIFO"
+    lux_stream > "$FIFO" &
+    STREAM_PID=$!
+
+    got_any=0
+    while read -r -t "$STALE_SECS" lux; do
+        case "$lux" in ''|*[!0-9.eE+-]*) continue ;; esac
+        got_any=1; backoff=1
+        t="$(now)"; dt=$(( t - last_t )); [ $dt -lt 1 ] && dt=1
+        force=0
+
+        if [ $dt -gt "$WAKE_GAP" ]; then
+            log "gap of ${dt}s: assuming wake from sleep; waiting ${WAKE_DELAY}s, then reapplying once"
+            sleep "$WAKE_DELAY"
+            ddc_invalidate
+            force=1
+            prev_lf=""            # don't filter across a sleep; start from the current room
+        fi
+        last_t="$t"
+
+        prev_lf="$(engine_filter "$lux" "$prev_lf" "$dt")"
+        state_set lux "$lux"; state_set filtered "$prev_lf"
+
+        mode="$(current_mode)"
+        moved="$(awk -v a="$prev_lf" -v b="$acted_lf" -v d="$LUX_DEADBAND" \
+            'BEGIN { x = a - b; if (x < 0) x = -x; print (b == "" || x >= d) ? 1 : 0 }')"
+
+        if [ "$moved" = 1 ] || [ "$force" = 1 ] || [ "$mode" != "$acted_mode" ]; then
+            apply_targets "$prev_lf" "$force"
+            acted_lf="$prev_lf"; acted_mode="$mode"
+            state_set acted "$acted_lf"
+            [ -n "$VERBOSE" ] && echo "lux=$lux lf=$prev_lf $(state_get target)" >&2
+        else
+            # Nothing changed enough; only keep the UDP bias state fresh.
+            govee_apply "$(state_get govee_pct 0)" "$(state_get govee_k 6500)"
+        fi
+    done < "$FIFO"
+
+    kill_tree "$STREAM_PID"; STREAM_PID=""
+    if [ $got_any = 0 ]; then
+        log "sensor: no data for ${STALE_SECS}s; holding outputs, reconnecting in ${backoff}s"
+    fi
+    sleep "$backoff"
+    backoff=$(( backoff * 2 )); [ $backoff -gt 30 ] && backoff=30
+done

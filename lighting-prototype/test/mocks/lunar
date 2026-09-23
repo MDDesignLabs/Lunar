@@ -1,0 +1,19 @@
+#!/bin/bash
+# Mock Lunar CLI. Understands the subset the prototype uses:
+#   lux [--listen]                      prints $MOCK_DIR/lux_values (one per line, MOCK_LUX_INTERVAL apart)
+#   displays <filter> <prop> [value]    brightness/redGain/greenGain/blueGain
+#   mode <mode>
+echo "lunar $*" >> "$MOCK_DIR/calls.log"
+case "$1" in
+    lux)
+        if [ "$2" = --listen ] || [ "$2" = -l ]; then
+            while read -r v; do echo "$v"; sleep "${MOCK_LUX_INTERVAL:-1}"; done < "$MOCK_DIR/lux_values"
+            sleep 3600
+        else
+            tail -n 1 "$MOCK_DIR/lux_values"
+        fi ;;
+    displays)
+        prop="$3"; val="$4"
+        if [ -n "$val" ]; then echo "$val" > "$MOCK_DIR/lunar_$prop"; else cat "$MOCK_DIR/lunar_$prop" 2>/dev/null || echo 50; fi ;;
+    mode) echo "$2" > "$MOCK_DIR/lunar_mode" ;;
+esac

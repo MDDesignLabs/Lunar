@@ -1,0 +1,84 @@
+#!/bin/bash
+# light: one-shot control. This is what Shortcuts, hotkeys and you call.
+#
+#   light critical on|off|toggle   colour-critical override (immediate, never rate-limited)
+#   light kelvin <K>               write the gains for K right now (manual / testing)
+#   light neutral                  write calibrated neutral gains once (panic button)
+#   light bias <pct> [K]           drive the Govee strips directly
+#   light status                   mode, lux, targets, today's write counts
+#   light writes [n]               last n DDC writes (default 20)
+
+. "$(dirname "$0")/../lib/common.sh"
+. "$PROTO_DIR/lib/ddc.sh"
+. "$PROTO_DIR/lib/govee.sh"
+. "$PROTO_DIR/lib/apply.sh"
+
+lf_now() { state_get filtered "2"; }   # 2 = 100 lux, used only if the daemon has never run
+
+neutral() {
+    IFS=: read -r r g b <<EOF
+$CRITICAL_GAINS
+EOF
+    ddc_gains "$r" "$g" "$b" 1
+}
+
+case "$1" in
+    critical)
+        want="$2"
+        if [ "$want" = toggle ] || [ -z "$want" ]; then
+            [ "$(current_mode)" = critical ] && want=off || want=on
+        fi
+        if [ "$want" = on ]; then
+            state_set mode critical
+            if [ "$BACKEND" = lunar ] && [ -n "$CRITICAL_BRIGHTNESS" ]; then
+                "$LUNAR" mode manual >/dev/null 2>&1   # stop Lunar re-adapting brightness
+            fi
+            apply_targets "$(lf_now)" 1
+            log "override ON"
+            echo "Colour-critical: ON (6500K, gains $CRITICAL_GAINS${CRITICAL_BRIGHTNESS:+, brightness $CRITICAL_BRIGHTNESS})"
+        else
+            state_set mode adaptive
+            if [ "$BACKEND" = lunar ] && [ -n "$CRITICAL_BRIGHTNESS" ]; then
+                "$LUNAR" mode "$RESTORE_LUNAR_MODE" >/dev/null 2>&1
+            fi
+            apply_targets "$(lf_now)" 1
+            log "override OFF"
+            echo "Colour-critical: OFF (adaptive, $(state_get kelvin '?')K)"
+        fi
+        ;;
+    kelvin)
+        [ -z "$2" ] && { echo "usage: light kelvin <K>" >&2; exit 64; }
+        eval "$(awk -f "$ENGINE" -v cmd=targets -v lf=2 -v mode=adaptive -v actual_b=0 \
+            -v curve="$BRIGHTNESS_CURVE" -v bmin=0 -v bmax=100 -v comp=0 -v gamma=1 \
+            -v kdim_lux=1 -v kdim="$2" -v kbright_lux=10 -v kbright="$2" -v kstep=1 \
+            -v table="$GAIN_TABLE" -v critical_gains="$CRITICAL_GAINS" \
+            -v nits_min=0 -v nits_max=1 -v bias_k=0 -v bias_min=0 -v bias_max=0 \
+            | grep -E '^(red|green|blue)=')"
+        ddc_gains "$red" "$green" "$blue" 1
+        echo "gains for ${2}K: $red/$green/$blue"
+        ;;
+    neutral)
+        neutral; echo "neutral: $CRITICAL_GAINS"
+        ;;
+    bias)
+        [ -z "$2" ] && { echo "usage: light bias <pct> [K]" >&2; exit 64; }
+        govee_apply "$2" "${3:-6500}" 1
+        echo "bias ${2}% ${3:-6500}K → ${GOVEE_IPS:-<no GOVEE_IPS set>}"
+        ;;
+    status)
+        echo "mode:      $(current_mode)   backend: $BACKEND   lux source: $LUX_SOURCE"
+        echo "lux:       $(state_get lux '?') (filtered log10: $(state_get filtered '?'))"
+        echo "target:    $(state_get target '?')"
+        echo "last sent: brightness=$(state_get last_brightness -) gains=$(state_get last_red -)/$(state_get last_green -)/$(state_get last_blue -)"
+        printf 'today:     '
+        for k in brightness red green blue; do printf '%s=%s ' "$k" "$(state_get "count_$(today)_$k" 0)"; done
+        echo "(caps: brightness $BRIGHTNESS_DAILY_CAP, gains $GAIN_DAILY_CAP each)"
+        ;;
+    writes)
+        tail -n "${2:-20}" "$LIGHT_HOME/writes.log" 2>/dev/null || echo "no writes yet"
+        ;;
+    *)
+        sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+        exit 64
+        ;;
+esac
