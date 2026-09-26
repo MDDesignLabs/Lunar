@@ -4,7 +4,8 @@
 # If reads work (probe 03), verification is automatic; otherwise you confirm by eye.
 # Cost: ~24 blue-gain writes.
 . "$(dirname "$0")/lib.sh"
-need_m1ddc; require_lunar_quiet
+need_m1ddc; require_lunar_quiet; require_baseline
+trap baseline_restore EXIT   # even if you Ctrl-C part-way
 OUT=04-single-write.txt; : > "$RESULTS/$OUT"
 
 reads_ok=0
@@ -33,7 +34,7 @@ say "Single-send (m1ddc-1x)"
 s1="$(trial m1x $n)"
 say "Double-send (stock m1ddc)"
 s2="$(trial m1 $n)"
-m1 set blue 50 >/dev/null
+baseline_restore
 
 record $OUT "single-send: $s1/$n landed"
 record $OUT "double-send: $s2/$n landed"

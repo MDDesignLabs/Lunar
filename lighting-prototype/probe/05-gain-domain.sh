@@ -6,7 +6,7 @@
 # spectrum and its reading is proportional to that channel's output.
 # Takes ~15 minutes. Cost: ~35 gain writes.
 . "$(dirname "$0")/lib.sh"
-need_m1ddc; require_lunar_quiet
+need_m1ddc; require_lunar_quiet; require_baseline
 OUT=05-gain-domain.txt; : > "$RESULTS/$OUT"
 CSV="$RESULTS/05-gain-measurements.csv"
 SETTLE="${SETTLE:-17}"     # ESPHome sliding window is 15 samples @ 1 s: wait it out
@@ -21,9 +21,9 @@ note "3. Take the ESP32 off its perch; tape the TSL2591 face-on to the CENTRE of
 note "   Don't move it until the probe ends."
 pause "Ready"
 
-orig_l="$(m1 get luminance 2>/dev/null)"; orig_l="${orig_l:-50}"
-restore() { m1 set red 50; m1 set green 50; m1 set blue 50; m1 set luminance "$orig_l"; } >/dev/null 2>&1
-trap 'restore; say "Restored gains 50/50/50 and brightness $orig_l"' EXIT
+orig_l="$(baseline_get luminance)"; orig_l="${orig_l:-50}"
+restore() { baseline_restore; m1 set luminance "$orig_l" >/dev/null 2>&1; }
+trap 'restore; say "Restored baseline gains and brightness $orig_l"' EXIT
 m1 set luminance "$orig_l" >/dev/null
 
 show_patch '#ffffff'

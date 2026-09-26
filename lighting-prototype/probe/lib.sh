@@ -63,6 +63,26 @@ require_lunar_quiet() {
     fi
 }
 
+# ── Baseline: what the monitor actually held before any probe touched it.
+# Written once by probe 03 (from DDC reads if they're trustworthy, else from the OSD
+# values you typed). Every probe that changes gains restores THIS, never an assumed 50.
+BASELINE="$RESULTS/baseline.txt"
+baseline_get() {  # baseline_get luminance|red|green|blue → value, or empty if no baseline yet
+    [ -f "$BASELINE" ] && awk -v k="$1" '$1 == k { print $2 }' "$BASELINE"
+}
+baseline_restore() {
+    local c v
+    if [ ! -f "$BASELINE" ]; then
+        note "No baseline yet (probe 03 records it). Leaving gains as they are."
+        return
+    fi
+    for c in red green blue; do v="$(baseline_get $c)"; [ -n "$v" ] && m1 set $c "$v" >/dev/null; done
+    note "Restored baseline gains $(baseline_get red)/$(baseline_get green)/$(baseline_get blue)."
+}
+require_baseline() {
+    [ -f "$BASELINE" ] || { echo "Run probe/03-ddc-read.sh first: it records the monitor's real starting values."; exit 1; }
+}
+
 # sse_avg <sensor-id> <seconds>: mean value of that id over a window, "nan" if none
 sse_avg() {
     python3 - "$SENSOR_URL" "$1" "$2" <<'PY'

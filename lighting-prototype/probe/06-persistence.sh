@@ -13,7 +13,8 @@
 #   probe/06-persistence.sh                   Part A only (default)
 #   probe/06-persistence.sh --with-power-cut  Part A + Part B (pulls the cord 3×; read the risk note first)
 . "$(dirname "$0")/lib.sh"
-need_m1ddc; require_lunar_quiet
+need_m1ddc; require_lunar_quiet; require_baseline
+trap baseline_restore EXIT   # even if you Ctrl-C part-way
 OUT=06-persistence.txt; : > "$RESULTS/$OUT"
 
 reads_ok=0; m1 set blue 50 >/dev/null; sleep 0.5; [ "$(m1 get blue 2>/dev/null)" = 50 ] && reads_ok=1
@@ -37,7 +38,7 @@ pause "Turn the AOC off with its power BUTTON, wait 10 s, turn it on, then press
 check_blue 40 "soft power off/on"
 
 if [ "$1" != --with-power-cut ]; then
-    m1 set blue 50 >/dev/null
+    baseline_restore
     record $OUT "Part B (power-cut commit test): SKIPPED. Conservative rate limits assume every write costs an EEPROM cycle."
     exit 0
 fi
@@ -51,7 +52,7 @@ for pair in 1:42 30:44 60:46; do
     pause "Wait 10 s, plug it back in, wait for the picture, then press Enter"
     check_blue $v "hard power cut ${delay}s after write"
 done
-m1 set blue 50 >/dev/null
+baseline_restore
 
 say "Interpretation"
 grep 'hard power cut' "$RESULTS/$OUT" | sed 's/^/  /'

@@ -31,9 +31,25 @@ n="$("$M1" display list 2>/dev/null | grep -c '^\[')"
 say "Lunar"
 if [ -x "$LUNAR" ]; then
     record $OUT "ok   Lunar CLI at $LUNAR"
-    lunar_running && record $OUT "     Lunar app is running" || record $OUT "     Lunar app is NOT running (lux/displays need it)"
+    if lunar_running; then
+        record $OUT "     Lunar app is running"
+        l_auto="$("$LUNAR" lux 2>&1 | tail -n 1)"
+        l_remote="$("$LUNAR" --remote lux 2>&1 | tail -n 1)"
+        record $OUT "     lunar lux          → $l_auto"
+        record $OUT "     lunar --remote lux → $l_remote"
+        case "$l_remote" in
+            *"Can't connect"*|*Unauthorized*|*rror*)
+                record $OUT "     DIAGNOSIS: the CLI can't reach the running app, so plain \`lunar lux\` ran a separate copy of Lunar that isn't connected to the sensor." ;;
+            -1*)
+                record $OUT "     DIAGNOSIS: the CLI reaches Lunar, but Lunar has no external-sensor reading right now (see the sensor check below)." ;;
+            *)
+                record $OUT "     DIAGNOSIS: Lunar returns the sensor's lux over the CLI. OK." ;;
+        esac
+    else
+        record $OUT "     Lunar app is NOT running (lux/displays need it)"
+    fi
 else
-    record $OUT "MISSING Lunar CLI. Lunar → Settings (gear) → Advanced → Install CLI, or menu 'Install CLI'"
+    record $OUT "MISSING Lunar CLI. Run: /Applications/Lunar.app/Contents/MacOS/Lunar install-cli"
 fi
 
 say "Sensor"

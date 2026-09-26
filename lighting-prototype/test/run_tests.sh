@@ -153,7 +153,9 @@ probe_env() {
     export MOCK_DIR; MOCK_DIR="$(mktemp -d)"; export LIGHT_HOME; LIGHT_HOME="$(mktemp -d)"
     mkdir -p "$LIGHT_HOME/tools"
     cp test/mocks/m1ddc "$LIGHT_HOME/tools/m1ddc"; cp test/mocks/m1ddc "$LIGHT_HOME/tools/m1ddc-1x"
-    rm -rf probe/results
+    rm -rf probe/results; mkdir -p probe/results
+    # A shifted baseline (as BetterDisplay might leave it) proves probes restore it, not 50.
+    printf 'luminance 60 ddc\nred 50 ddc\ngreen 47 ddc\nblue 44 ddc\n' > probe/results/baseline.txt
 }
 for model in "1.0 0 LINEAR-LIGHT 5403K" "2.2 1 GAMMA-ENCODED 4512K"; do
     set -- $model
@@ -163,11 +165,15 @@ for model in "1.0 0 LINEAR-LIGHT 5403K" "2.2 1 GAMMA-ENCODED 4512K"; do
     kill $SP
     check "probe 05 identifies a simulated exponent-$1 monitor as $3" "echo \"\$res\" | grep -q 'RESULT Q3: $3'"
     check "probe 05 reports its 4500K row as ≈$4" "echo \"\$res\" | grep -q '4500K  50/44/36  → measured ≈  $4'"
-    check "probe 05 restores 50/50/50 afterwards" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 50 ] && [ \$(cat \$MOCK_DIR/m1ddc_green) = 50 ]"
+    check "probe 05 restores the recorded baseline (50/47/44), not 50/50/50" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ] && [ \$(cat \$MOCK_DIR/m1ddc_green) = 47 ]"
 done
 probe_env
 res="$(yes "" | bash probe/04-single-write.sh 2>&1)"
 check "probe 04: monitor that accepts single writes → 'takes single writes'" "echo \"\$res\" | grep -q 'RESULT Q1: NO'"
+check "probe 04 puts blue back to the baseline (44)" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
+rm -rf probe/results
+res="$(yes "" | bash probe/04-single-write.sh 2>&1)"
+check "probe 04 refuses to run before probe 03 has recorded a baseline" "echo \"\$res\" | grep -q 'Run probe/03-ddc-read.sh first'"
 probe_env
 res="$(yes "" | MOCK_DROP_SINGLE=1 bash probe/04-single-write.sh 2>&1)"
 check "probe 04: monitor that drops single writes → 'keep double-send'" "echo \"\$res\" | grep -q 'RESULT Q1: YES'"

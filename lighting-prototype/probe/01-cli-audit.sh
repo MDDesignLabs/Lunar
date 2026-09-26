@@ -32,8 +32,14 @@ note "Reading 0x1A straight from the monitor (lunar ddc external 0x1A read):"
 record $OUT "lunar ddc external 0x1A read → $("$L" ddc external 0x1A read 2>&1)"
 
 pause "Open the AOC's OSD colour page so you can watch the Blue value, then press Enter"
-before="$(lunar_get blueGain)"
-case "$before" in ''|*[!0-9]*) before=50 ;; esac
+# Restore what the MONITOR holds now, not Lunar's stored copy: BetterDisplay (or anything
+# else) may have changed the gains behind Lunar's back.
+before="$("$L" ddc external 0x1A read 2>/dev/null | tail -n 1 | tr -dc '0-9')"
+if [ -z "$before" ]; then
+    before="$(ask 'DDC read failed. What Blue value does the OSD show right now?')"
+fi
+case "$before" in ''|*[!0-9]*) echo "Need a numeric Blue value to restore; stopping before any write."; exit 1 ;; esac
+record $OUT "monitor's Blue before test = $before (Lunar's stored copy: $(lunar_get blueGain))"
 "$L" displays external blueGain 30 >/dev/null 2>&1
 if ask_yn "Did the screen turn visibly yellow and the OSD Blue value change to 30?"; then
     record $OUT "RESULT A2: YES. \`lunar displays external blueGain 30\` writes VCP 0x1A."

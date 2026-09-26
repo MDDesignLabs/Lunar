@@ -25,6 +25,18 @@ for c in luminance red green blue; do
     if [ $fails -gt 2 ] || [ "$(echo "$uniq" | wc -w)" -gt 1 ] || [ "$first" != "$o" ]; then sane=0; fi
 done
 
+# Record the baseline every later probe restores to.
+: > "$BASELINE"
+for c in luminance red green blue; do
+    case $c in luminance) o=$osd_l ;; red) o=$osd_r ;; green) o=$osd_g ;; blue) o=$osd_b ;; esac
+    r="$(m1 get $c 2>/dev/null)"
+    if [ $sane = 1 ] && [ -n "$r" ]; then echo "$c $r ddc" >> "$BASELINE"; else echo "$c $o osd" >> "$BASELINE"; fi
+done
+record $OUT "BASELINE (restored after every later probe): $(awk '{ printf "%s=%s(%s) ", $1, $2, $3 }' "$BASELINE")"
+if [ "$(baseline_get red)/$(baseline_get green)/$(baseline_get blue)" != 50/50/50 ]; then
+    record $OUT "NOTE: gains are NOT 50/50/50 right now; something (BetterDisplay?) left them shifted. Tell Claude before probe 05."
+fi
+
 if [ $sane = 1 ]; then
     record $OUT "RESULT Q2: YES. Reads are consistent and match the OSD. The app can verify writes."
 else
