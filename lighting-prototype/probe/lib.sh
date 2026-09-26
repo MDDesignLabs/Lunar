@@ -3,7 +3,7 @@
 
 PROBE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS="${LIGHT_HOME:-$HOME/.lighting}/tools"
-RESULTS="$PROBE_DIR/results"
+RESULTS="${PROBE_RESULTS:-$PROBE_DIR/results}"   # the test suite points this at a temp dir
 mkdir -p "$RESULTS" "$TOOLS"
 
 M1="$TOOLS/m1ddc"         # stock m1ddc: every write sent twice (DDC_ITERATIONS 2)
@@ -14,11 +14,12 @@ M1DDC_DISPLAY="${M1DDC_DISPLAY:-}"
 
 say()   { printf '\n\033[1m%s\033[0m\n' "$*"; }
 note()  { printf '  %s\n' "$*"; }
-pause() { printf '\n  → %s  [Enter] ' "$*"; read -r _; }
+# Prompts go to stderr, so they still show when a probe captures a function's output.
+pause() { printf '\n  → %s  [Enter] ' "$*" >&2; read -r _; }
 ask_yn() {  # ask_yn "question" → returns 0 for yes
     local a
     while true; do
-        printf '  ? %s [y/n] ' "$1"; read -r a
+        printf '  ? %s [y/n] ' "$1" >&2; read -r a
         case "$a" in y|Y) return 0 ;; n|N) return 1 ;; esac
     done
 }
@@ -38,18 +39,24 @@ need_m1ddc() {
 
 lunar_running() { pgrep -xq Lunar; }
 betterdisplay_running() { pgrep -xq BetterDisplay; }
+monitorcontrol_running() { pgrep -xq MonitorControl; }
 
 # Lunar prints a property as "0: <name>" then "<TAB><Property>: <value>". Return the value.
 lunar_get() { "$LUNAR" displays external "$1" 2>/dev/null | awk -F': ' '/^\t/ { print $NF; exit }'; }
 
-# BetterDisplay is also a DDC client. Any probe that touches the monitor needs it closed.
+# BetterDisplay and MonitorControl are also DDC clients. Any probe that touches the
+# monitor needs them closed.
 require_betterdisplay_quiet() {
-    if betterdisplay_running; then
-        say "BetterDisplay is running."
-        note "It's another app on the same DDC bus. Quit it for the probes (menu bar icon → Quit)."
-        pause "Quit BetterDisplay, then press Enter"
-        betterdisplay_running && { echo "BetterDisplay still running; stopping."; exit 1; }
-    fi
+    local app check
+    for app in BetterDisplay MonitorControl; do
+        check=betterdisplay_running; [ $app = MonitorControl ] && check=monitorcontrol_running
+        if $check; then
+            say "$app is running."
+            note "It's another app on the same DDC bus. Quit it for the probes (menu bar icon → Quit)."
+            pause "Quit $app, then press Enter"
+            $check && { echo "$app still running; stopping."; exit 1; }
+        fi
+    done
 }
 
 # lightd (the adaptive loop) also writes brightness and gains. It must not run during a probe.

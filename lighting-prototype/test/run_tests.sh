@@ -6,6 +6,10 @@
 
 cd "$(dirname "$0")/.." || exit 1
 ROOT="$(pwd)"
+# Every temp file and directory lives under one root, removed on exit.
+TEST_TMP="$(mktemp -d)"; export TMPDIR="$TEST_TMP"
+real_results() { ls -la probe/results 2>/dev/null; cat probe/results/* 2>/dev/null; }
+REAL_RESULTS_BEFORE="$(real_results)"
 PASS=0; FAIL=0
 ok()   { PASS=$((PASS + 1)); printf '  \033[32mPASS\033[0m %s\n' "$1"; }
 bad()  { FAIL=$((FAIL + 1)); printf '  \033[31mFAIL\033[0m %s\n' "$1"; [ -n "$2" ] && printf '       %s\n' "$2"; }
@@ -27,6 +31,7 @@ BRIGHTNESS_MIN_INTERVAL=0
 GAIN_GAP_MS=0
 GOVEE_IPS=127.0.0.1
 BIAS_REFRESH=3600
+OTHER_DDC_APPS=FakeDDCApp
 $1
 EOF
 }
@@ -34,7 +39,14 @@ calls() { local c; c="$(grep -c "$1" "$MOCK_DIR/calls.log" 2>/dev/null)"; echo "
 eng() { awk -f lib/engine.awk "$@"; }
 
 PIDS=""
-cleanup() { for p in $PIDS; do kill "$p" 2>/dev/null; done; }
+# Only the main test shell cleans up. A background job killed just after it was forked
+# is still a copy of this shell and would otherwise run this trap too (bash 3.2 has no
+# $BASHPID, so compare the trap runner's PID via a child's parent PID).
+MAIN_PID=$$
+cleanup() {
+    [ "$(exec sh -c 'echo $PPID')" = "$MAIN_PID" ] || return 0
+    for p in $PIDS; do kill "$p" 2>/dev/null; done; rm -rf "$TEST_TMP"
+}
 trap cleanup EXIT
 
 echo "── 1. Engine maths"
@@ -60,16 +72,21 @@ b_comp="$(engine_targets 1 adaptive | sed -n 's/brightness=//p')"
 check "luminance compensation raises backlight when warm ($b_nocomp → $b_comp)" "[ $b_comp -gt $b_nocomp ]"
 check "a malformed or out-of-order curve entry is ignored, not read as 0%" \
     "[ \$(BRIGHTNESS_CURVE='0:21,134,100:45,1000:100' LUMINANCE_COMPENSATION=0 engine_targets 2 adaptive | sed -n 's/brightness=//p') = 45 ]"
+check "Kelvin never goes below KELVIN_FLOOR, whatever the config (KELVIN_DIM=3000 → 4000)" \
+    "KELVIN_DIM=3000 engine_targets 0 adaptive | grep -q kelvin=4000"
+check "no gain above neutral, even if the table has one (red 55 → 50)" \
+    "GAIN_TABLE='6500:55:50:50,5000:55:46:40' engine_targets 2.4771 adaptive | grep -q red=50"
 check "bias follows Lunar's actual brightness when Lunar owns it" \
     "[ \$(t 2 adaptive 100 | sed -n 's/bias=//p') -gt \$(t 2 adaptive 10 | sed -n 's/bias=//p') ]"
 
 echo "── 2. DDC scheduler (mock m1ddc)"
-fresh "BRIGHTNESS_MIN_INTERVAL=3600"
+fresh "BRIGHTNESS_MIN_INTERVAL=0"
 . lib/common.sh; . lib/ddc.sh
 ddc_brightness 40; ddc_brightness 40
 check "no-op: same value is never re-sent" "[ \$(calls 'set luminance') = 1 ]"
 ddc_brightness 41
-check "dead-band: a 1-unit change is skipped" "[ \$(calls 'set luminance') = 1 ]"
+check "dead-band: a 1-unit change is skipped (no interval in play)" "[ \$(calls 'set luminance') = 1 ]"
+BRIGHTNESS_MIN_INTERVAL=3600
 ddc_brightness 60
 check "min interval: 2nd adaptive write inside 1h is deferred" "[ \$(calls 'set luminance') = 1 ]"
 ddc_brightness 60 1
@@ -80,6 +97,29 @@ for v in 10 20 30 40 50 60; do ddc_brightness $v; done
 check "daily cap: only 3 of 6 writes reach the monitor" "[ \$(calls 'set luminance') = 3 ]"
 check "cap is logged once" "[ \$(grep -c CAP \"$LIGHT_HOME/lightd.log\") = 1 ]"
 check "write log records every attempt" "[ \$(wc -l < \"$LIGHT_HOME/writes.log\") = 3 ]"
+fresh "GAIN_DAILY_CAP=2 OVERRIDE_RESERVE=1"
+. lib/common.sh; . lib/ddc.sh
+ddc_gains 50 50 48 1; ddc_gains 50 50 46 1; ddc_gains 50 50 44 1
+check "gain cap: an adaptive set past the cap is refused (rc 3)" "[ \$(calls 'set blue') = 2 ]"
+fresh "GAIN_DAILY_CAP=2 OVERRIDE_RESERVE=1"
+. lib/common.sh; . lib/ddc.sh
+MOCK_FAIL=1 ddc_gains 50 50 48 1; MOCK_FAIL=1 ddc_gains 50 50 47 1; ddc_gains 50 50 46 1; rc=$?
+check "failed attempts count: after 2 failures the cap refuses the 3rd (rc 3)" "[ $rc = 3 ] && [ \$(cat \"$LIGHT_HOME/state/count_$(today)_blue\") = 2 ]"
+ddc_gains 50 50 50 1 neutral; rc=$?
+check "a write back to neutral may use the reserve past the cap" "[ $rc = 0 ] && [ \$(cat \$MOCK_DIR/m1ddc_blue) = 50 ]"
+fresh "KELVIN_MIN_INTERVAL=3600"
+. lib/common.sh; . lib/ddc.sh
+state_set last_t_gainset "$(now)"
+ddc_gains 50 47 44; rc=$?
+check "an adaptive gain set inside the interval is deferred and marked pending" "[ $rc = 2 ] && [ \$(state_get gains_pending 0) = 1 ]"
+state_set last_t_gainset 0; ddc_gains 50 47 44
+check "…and once the interval has passed it is written and the flag cleared" "[ \$(state_get gains_pending 1) = 0 ] && [ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
+state_set mode critical; ddc_gains 50 46 40 1 adaptive; state_set mode adaptive
+check "an adaptive set that finds the override on (after waiting for the lock) is skipped" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
+sh -c 'exit 0' & DEADP=$!; wait $DEADP
+mkdir "$STATE/.lock"; echo $DEADP > "$STATE/.lock/pid"
+t0=$(date +%s); ddc_brightness 33 1; t1=$(date +%s)
+check "a lock left by a dead process is broken at once, not after 30 s" "[ \$(cat \$MOCK_DIR/m1ddc_luminance) = 33 ] && [ $(( t1 - t0 )) -le 2 ]"
 fresh; . lib/common.sh; . lib/ddc.sh
 ddc_gains 50 46 40 1; ddc_gains 50 46 38 1
 check "gain set only re-sends channels that changed" \
@@ -114,7 +154,7 @@ kill -TERM $DPID; wait $DPID 2>/dev/null
 n_red="$(calls 'set red')"; n_blue="$(calls 'set blue')"; n_lum="$(calls 'set luminance')"
 check "parsed lux from the right SSE id (last lux ≈ 5)" "[ \"\$(cat $LIGHT_HOME/state/lux)\" = 5.0 ]" "lux=$(cat $LIGHT_HOME/state/lux 2>/dev/null)"
 check "white point warmed as the room dimmed (blue went below 50)" "grep 'set blue' $MOCK_DIR/calls.log | grep -qv 'blue 50$'"
-check "filter + dead-band kept writes low: $n_lum brightness, $n_blue blue writes for ~100 samples" "[ $n_lum -le 12 ] && [ $n_blue -le 8 ]"
+check "filter + dead-band kept writes low: $n_lum brightness, $n_blue blue writes for ~35 samples" "[ $n_lum -le 12 ] && [ $n_blue -le 8 ]"
 check "exit wrote neutral gains (monitor not left warm)" "tail -n 3 $MOCK_DIR/calls.log | grep -q 'set blue 50'"
 check "bias light received brightness + Kelvin" "grep -q '\"cmd\":\"brightness\"' '$GLOG' && grep -q colorTemInKelvin '$GLOG'"
 
@@ -128,6 +168,7 @@ bin/light critical on >/dev/null
 check "critical ON → neutral gains immediately despite 1h gain interval" "tail -n 4 $MOCK_DIR/calls.log | grep -q 'set blue 50'"
 check "critical ON → brightness frozen at 40" "grep -q 'set luminance 40' $MOCK_DIR/calls.log"
 check "status shows the mode" "bin/light status | grep -q 'mode:      critical'"
+check "light kelvin is refused while colour-critical is on" "! bin/light kelvin 4500 2>/dev/null && [ \$(cat \$MOCK_DIR/m1ddc_blue) = 50 ]"
 bin/light critical toggle >/dev/null
 check "toggle → back to adaptive, warm again immediately" "tail -n 3 $MOCK_DIR/calls.log | grep -q 'set blue [0-4]'"
 
@@ -156,9 +197,10 @@ probe_env() {
     mkdir -p "$LIGHT_HOME/tools"
     cp test/mocks/m1ddc "$LIGHT_HOME/tools/m1ddc"; cp test/mocks/m1ddc "$LIGHT_HOME/tools/m1ddc-1x"
     printf '#!/bin/sh\nexec sleep 3600\n' > "$LIGHT_HOME/tools/whitepatch"; chmod +x "$LIGHT_HOME/tools/whitepatch"
-    rm -rf probe/results; mkdir -p probe/results
+    # Never the real probe/results: that holds your hardware measurements.
+    export PROBE_RESULTS; PROBE_RESULTS="$(mktemp -d)"
     # A shifted baseline (as BetterDisplay might leave it) proves probes restore it, not 50.
-    printf 'luminance 60 ddc\nred 50 ddc\ngreen 47 ddc\nblue 44 ddc\n' > probe/results/baseline.txt
+    printf 'luminance 60 ddc\nred 50 ddc\ngreen 47 ddc\nblue 44 ddc\n' > "$PROBE_RESULTS/baseline.txt"
 }
 for model in "1.0 0 LINEAR-LIGHT 5403K" "2.2 1 GAMMA-ENCODED 4512K"; do
     set -- $model
@@ -175,7 +217,7 @@ FAKE_BLIND=1 python3 test/fake_screen_sensor.py 18091 1.0 0 & SP=$!; PIDS="$PIDS
 res="$(yes "" | SENSOR_URL=http://127.0.0.1:18091/events SETTLE=0.2 WINDOW=0.6 bash probe/05-gain-domain.sh 2>&1)"
 kill $SP
 check "probe 05 stops at preflight when the sensor can't see the screen" "echo \"\$res\" | grep -q 'PREFLIGHT FAILED'"
-check "…and it stops before the sweep (no per-channel rows written)" "! grep -q '^red,' probe/results/05-gain-measurements.csv"
+check "…and it stops before the sweep (no per-channel rows written)" "[ -f \$PROBE_RESULTS/05-gain-measurements.csv ] && ! grep -q '^red,' \$PROBE_RESULTS/05-gain-measurements.csv"
 check "…and still restores the baseline gains" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
 check "…and puts brightness back to the baseline (60)" "[ \$(cat \$MOCK_DIR/m1ddc_luminance) = 60 ]"
 probe_env
@@ -188,13 +230,20 @@ probe_env
 res="$(yes "" | bash probe/04-single-write.sh 2>&1)"
 check "probe 04: monitor that accepts single writes → 'takes single writes'" "echo \"\$res\" | grep -q 'RESULT Q1: NO'"
 check "probe 04 puts blue back to the baseline (44)" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
-rm -rf probe/results
+rm -f "$PROBE_RESULTS/baseline.txt"
 res="$(yes "" | bash probe/04-single-write.sh 2>&1)"
 check "probe 04 refuses to run before probe 03 has recorded a baseline" "echo \"\$res\" | grep -q 'Run probe/03-ddc-read.sh first'"
 probe_env
 res="$(yes "" | MOCK_DROP_SINGLE=1 bash probe/04-single-write.sh 2>&1)"
 check "probe 04: monitor that drops single writes → 'keep double-send'" "echo \"\$res\" | grep -q 'RESULT Q1: YES'"
-rm -rf probe/results
+probe_env
+printf '#!/bin/sh\nexec sleep 1\n' > "$LIGHT_HOME/tools/whitepatch"   # the user clicks the white screen after ~1 s
+python3 test/fake_screen_sensor.py 18092 1.0 0 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+res="$(yes "" | SENSOR_URL=http://127.0.0.1:18092/events SETTLE=0.2 WINDOW=0.6 bash probe/05-gain-domain.sh 2>&1)"
+kill $SP
+check "probe 05 stops when the white screen is closed (no verdict from desktop readings)" \
+    "echo \"\$res\" | grep -q 'ABORTED: the white screen' && ! echo \"\$res\" | grep -q 'RESULT Q3'"
+check "…and restores the baseline" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
 
 echo "── 8. No-Lunar setup: direct lux, DDC-app guard, nudges, display sleep"
 fresh "LUX_SOURCE=direct KELVIN_MIN_INTERVAL=0 GOVEE_IPS= SENSOR_URL=http://127.0.0.1:18084/events"
@@ -203,13 +252,28 @@ bin/lightd & DPID=$!; sleep 3; kill -TERM $DPID; wait $DPID 2>/dev/null; kill $S
 check "LUX_SOURCE=direct reads the ESP32 stream" "[ \"\$(cat $LIGHT_HOME/state/lux 2>/dev/null)\" = 40.0 ]"
 
 fresh; . lib/common.sh; . lib/ddc.sh
-FAKEAPP="$(mktemp -d)"; cp "$(command -v sleep)" "$FAKEAPP/Lunar"; "$FAKEAPP/Lunar" 30 & LP=$!; PIDS="$PIDS $LP"; sleep 0.3
+FAKEAPP="$(mktemp -d)"; cp "$(command -v sleep)" "$FAKEAPP/FakeDDCApp"; "$FAKEAPP/FakeDDCApp" 30 & LP=$!; PIDS="$PIDS $LP"; sleep 0.3
 ddc_brightness 55 1; rc=$?
-check "while an app named Lunar runs, m1ddc writes are refused (rc 4, nothing sent)" "[ $rc = 4 ] && [ \$(calls 'set luminance') = 0 ]"
+check "while another DDC app runs, m1ddc writes are refused (rc 4, nothing sent)" "[ $rc = 4 ] && [ \$(calls 'set luminance') = 0 ]"
+state_set mode adaptive
+bin/light critical on >/dev/null 2>"$LIGHT_HOME/err"; rc=$?
+check "…and 'light critical on' says the override is NOT neutral yet (exit 1), not 'ON'" \
+    "[ $rc = 1 ] && grep -q 'NOT neutral' $LIGHT_HOME/err && bin/light status | grep -q INCOMPLETE"
+state_set mode adaptive; state_set critical_rc 0
 check "the refusal is logged once" "[ \$(grep -c BLOCKED $LIGHT_HOME/lightd.log) = 1 ]"
 kill $LP; wait $LP 2>/dev/null; sleep 0.2
 ddc_brightness 55 1
-check "once Lunar quits, writes go through again" "[ \$(calls 'set luminance 55') = 1 ]"
+check "once that app quits, writes go through again" "[ \$(calls 'set luminance 55') = 1 ]"
+
+fresh "GAIN_DAILY_CAP=2 OVERRIDE_RESERVE=3 KELVIN_MIN_INTERVAL=3600"; . lib/common.sh
+state_set filtered 0.7
+state_set "count_$(today)_blue" 2; state_set "count_$(today)_green" 2; state_set "count_$(today)_red" 2
+state_set last_red 50; state_set last_green 46; state_set last_blue 40
+bin/light critical on >/dev/null; rc=$?
+check "override still reaches neutral after the adaptive cap is used up (reserve)" \
+    "[ $rc = 0 ] && [ \$(cat \$MOCK_DIR/m1ddc_blue) = 50 ] && [ \$(cat \$MOCK_DIR/m1ddc_green) = 50 ]"
+bin/light critical off >/dev/null
+check "…but adaptive writes stay stopped at the cap" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 50 ]"
 
 fresh "GOVEE_IPS="; . lib/common.sh
 state_set filtered 2              # 100 lux
@@ -239,6 +303,26 @@ kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
 check "no DDC writes while the display sleeps, even as the room dims" "[ $n_sleep_start = $n_sleep_end ]"
 check "display sleep and wake are logged" "grep -q 'display asleep' $LIGHT_HOME/lightd.log && grep -q 'display woke' $LIGHT_HOME/lightd.log"
 check "after wake, values are re-sent (writes resume)" "[ \$(wc -l < $MOCK_DIR/calls.log) -gt $n_sleep_end ]"
+
+echo "── 9. lightd robustness: bad samples, second copy, deferred gain sets"
+fresh "GOVEE_IPS= SENSOR_URL=http://127.0.0.1:18086/events"
+python3 test/fake_sensor.py 18086 0.2 300 300 300 -1 -1 -1 -1 -1 -1 -1 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 3
+res2="$(bin/lightd 2>&1)"; rc=$?
+kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+check "a negative lux sample (Lunar's -1) is ignored, not treated as darkness" \
+    "[ \"\$(cat $LIGHT_HOME/state/lux)\" = 300.0 ] && ! grep -q 'set blue 40' $MOCK_DIR/calls.log"
+check "a second lightd refuses to start while one is running" "[ $rc = 1 ] && echo \"\$res2\" | grep -q 'already running'"
+
+fresh "GOVEE_IPS= KELVIN_MIN_INTERVAL=4 TAU_DOWN=1 SENSOR_URL=http://127.0.0.1:18087/events"
+python3 test/fake_sensor.py 18087 0.2 300 300 300 300 300 5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 7
+kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+check "a gain set deferred by the interval is applied later, though lux has stopped moving" \
+    "grep -q 'set blue 40' $MOCK_DIR/calls.log"
+
+check "the suite left the real probe/results folder (your hardware data) untouched" \
+    "[ \"\$(real_results)\" = \"\$REAL_RESULTS_BEFORE\" ]"
 
 echo
 echo "$PASS passed, $FAIL failed"

@@ -15,26 +15,37 @@ k="$(cat "$S/kelvin" 2>/dev/null || echo '?')"
 lux="$(cat "$S/lux" 2>/dev/null || echo '?')"
 day="$(date +%Y-%m-%d)"
 
-if [ "$mode" = critical ]; then
+crit_rc="$(cat "$S/critical_rc" 2>/dev/null || echo 0)"
+if [ "$mode" = critical ] && [ "$crit_rc" != 0 ]; then
+    echo "⚠︎ NOT neutral | sfimage=exclamationmark.triangle color=red"
+elif [ "$mode" = critical ]; then
     echo "◉ 6500K | sfimage=circle.lefthalf.filled color=#8E8E93"
 else
     echo "☀︎ ${k}K | sfimage=sun.max"
 fi
 echo "---"
 echo "Lux: $lux · target: $(cat "$S/target" 2>/dev/null | sed 's/ mode=.*//')"
-if [ "$mode" = critical ]; then
-    echo "Colour-critical: ON (neutral 6500K) | color=#34C759"
+if [ "$mode" = critical ] && [ "$crit_rc" != 0 ]; then
+    echo "Colour-critical: ON but gains NOT neutral yet | color=red"
+    [ "$crit_rc" = 4 ] && echo "Another DDC app is running: quit it (retrying automatically)"
+    [ "$crit_rc" = 3 ] && echo "Write allowance used up today: set the OSD to 50/50/50 by hand"
+    echo "Retry now | bash=$PROTO/bin/light param1=critical param2=on terminal=false refresh=true"
+    echo "Turn off → adaptive | bash=$PROTO/bin/light param1=critical param2=off terminal=false refresh=true"
+elif [ "$mode" = critical ]; then
+    echo "Colour-critical: ON (neutral 6500K)"
     echo "Turn off → adaptive | bash=$PROTO/bin/light param1=critical param2=off terminal=false refresh=true"
 else
     echo "Colour-critical: off"
     echo "Turn ON (freeze at 6500K) | bash=$PROTO/bin/light param1=critical param2=on terminal=false refresh=true"
 fi
-echo "---"
-echo "Warm now (until the room changes)"
-for kk in 6000 5500 5000 4500; do
-    echo "--${kk}K | bash=$PROTO/bin/light param1=kelvin param2=$kk terminal=false refresh=true"
-done
-echo "Neutral once | bash=$PROTO/bin/light param1=neutral terminal=false refresh=true"
+if [ "$mode" != critical ]; then
+    echo "---"
+    echo "Warm now (until the room changes)"
+    for kk in 6000 5500 5000 4500; do
+        echo "--${kk}K | bash=$PROTO/bin/light param1=kelvin param2=$kk terminal=false refresh=true"
+    done
+    echo "Neutral once | bash=$PROTO/bin/light param1=neutral terminal=false refresh=true"
+fi
 echo "---"
 printf 'DDC writes today: '
 for c in brightness red green blue; do printf '%s %s  ' "$c" "$(cat "$S/count_${day}_$c" 2>/dev/null || echo 0)"; done

@@ -3,11 +3,25 @@
 # Read-only (reads are also DDC transactions, but they don't write settings).
 . "$(dirname "$0")/lib.sh"
 need_m1ddc; require_lunar_quiet
-OUT=03-ddc-read.txt; : > "$RESULTS/$OUT"
+OUT=03-ddc-read.txt
+if [ -f "$BASELINE" ] && [ "$1" != --rebaseline ]; then
+    echo "A baseline already exists ($BASELINE):"; cat "$BASELINE"
+    echo "Rerunning after an interrupted probe would record the shifted values as 'original'."
+    echo "If the monitor really is back at its original settings, rerun with: $0 --rebaseline"
+    exit 1
+fi
+: > "$RESULTS/$OUT"
 
 pause "Open the AOC OSD and note Brightness, and R/G/B in the User colour mode. Press Enter"
-osd_l="$(ask 'OSD Brightness value?')"
-osd_r="$(ask 'OSD Red?')"; osd_g="$(ask 'OSD Green?')"; osd_b="$(ask 'OSD Blue?')"
+ask_num() {  # ask until the answer is a whole number 0–100
+    local a
+    while true; do
+        a="$(ask "$1")"
+        case "$a" in ''|*[!0-9]*) note "Type a number from 0 to 100." >&2 ;; *) [ "$a" -le 100 ] && { echo "$a"; return; } ;; esac
+    done
+}
+osd_l="$(ask_num 'OSD Brightness value?')"
+osd_r="$(ask_num 'OSD Red?')"; osd_g="$(ask_num 'OSD Green?')"; osd_b="$(ask_num 'OSD Blue?')"
 
 say "Reading each control 10× (get) and its max"
 sane=1

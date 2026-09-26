@@ -3,7 +3,8 @@
 # Every write to the monitor goes through ddc_write, which enforces:
 #   - no-op skipping (never re-send the value last written)
 #   - dead-band and minimum interval (unless forced, e.g. the override)
-#   - a persistent daily cap per VCP, counted on every *attempt*
+#   - a persistent daily cap per VCP, counted on every *attempt*. Writes back to neutral
+#     (override, neutral on exit/crash) may use OVERRIDE_RESERVE more on top of it
 #   - a write log: $LIGHT_HOME/writes.log  (epoch vcp value result ms backend)
 #
 # Return codes: 0 written, 1 backend failed, 2 skipped (no-op/dead-band/interval), 3 daily cap hit,
@@ -50,10 +51,10 @@ backend_write() {
     esac
 }
 
-# ddc_write <vcp> <value> <min_interval_s> <deadband> <daily_cap> [force]
+# ddc_write <vcp> <value> <min_interval_s> <deadband> <daily_cap> [force] [reserve]
 ddc_write() {
-    local vcp="$1" value="$2" interval="$3" deadband="$4" cap="$5" force="${6:-0}"
-    local last last_t count t0 t1 ok ms key app
+    local vcp="$1" value="$2" interval="$3" deadband="$4" cap="$5" force="${6:-0}" reserve="${7:-0}"
+    local last last_t count t0 t1 ok ms key app day
     key="$(vcp_name "$vcp")"
     last="$(state_get "last_$key" "")"
     last_t="$(state_get "last_t_$key" 0)"
@@ -72,15 +73,20 @@ ddc_write() {
         return 4
     fi
 
-    count="$(state_get "count_$(today)_$key" 0)"
+    day="$(today)"
+    count="$(state_get "count_${day}_$key" 0)"
     if [ "$count" -ge "$cap" ]; then
-        if [ "$(state_get "capped_$(today)_$key" 0)" = 0 ]; then
+        if [ "$(state_get "capped_${day}_$key" 0)" = 0 ]; then
             log "CAP: $key reached $cap writes today; adaptive writes stopped until midnight"
-            state_set "capped_$(today)_$key" 1
+            state_set "capped_${day}_$key" 1
         fi
-        return 3
+        if [ "$count" -ge $(( cap + reserve )) ]; then
+            [ "$reserve" -gt 0 ] && log "CAP: $key used its $reserve-write neutral reserve too; nothing more today"
+            return 3
+        fi
+        log "CAP: $key=$value uses the neutral reserve ($(( count - cap + 1 ))/$reserve)"
     fi
-    state_set "count_$(today)_$key" $(( count + 1 ))
+    state_set "count_${day}_$key" $(( count + 1 ))
 
     t0="$(now_ms)"
     if backend_write "$vcp" "$value" >/dev/null 2>&1; then ok=ok; else ok=FAIL; fi
@@ -99,32 +105,47 @@ ddc_write() {
 
 ddc_brightness() {  # <value> [force]
     local rc=0
-    lock
+    lock || return 1
     ddc_write 0x10 "$1" "$BRIGHTNESS_MIN_INTERVAL" "$BRIGHTNESS_DEADBAND" "$BRIGHTNESS_DAILY_CAP" "${2:-0}" || rc=$?
     unlock
     return $rc
 }
 
 # Write R, G, B as one set. Adaptive sets are rate-limited as a unit.
-ddc_gains() {  # <r> <g> <b> [force]
-    local r="$1" g="$2" b="$3" force="${4:-0}" last_set gap rc=0 wrote=0 c
+#   kind "adaptive": skipped if the override came on while waiting for the lock
+#   kind "neutral":  a write back to CRITICAL_GAINS; may use OVERRIDE_RESERVE past the cap
+# Returns 0, or the worst per-channel code (4 blocked > 3 capped > 1 failed), or 2 if deferred.
+ddc_gains() {  # <r> <g> <b> [force] [adaptive|neutral]
+    local r="$1" g="$2" b="$3" force="${4:-0}" kind="${5:-adaptive}" last_set gap rc=0 wrote=0 c res reserve=0
     last_set="$(state_get last_t_gainset 0)"
-    if [ "$force" != 1 ] && [ $(( $(now) - last_set )) -lt "$KELVIN_MIN_INTERVAL" ]; then return 2; fi
+    if [ "$force" != 1 ] && [ $(( $(now) - last_set )) -lt "$KELVIN_MIN_INTERVAL" ]; then
+        state_set gains_pending 1          # lightd retries once the interval has passed
+        return 2
+    fi
+    [ "$kind" = neutral ] && reserve="${OVERRIDE_RESERVE:-0}"
     gap="$(awk -v ms="$GAIN_GAP_MS" 'BEGIN { printf "%.3f", ms / 1000 }')"
 
-    lock
+    lock || return 1
+    if [ "$kind" = adaptive ] && [ "$(state_get mode adaptive)" = critical ]; then unlock; return 2; fi
     for c in "0x16 $r" "0x18 $g" "0x1A $b"; do
         # shellcheck disable=SC2086
-        ddc_write $c 0 0 "$GAIN_DAILY_CAP" 1
-        case $? in
+        ddc_write $c 0 0 "$GAIN_DAILY_CAP" 1 "$reserve"
+        res=$?
+        case $res in
             0) wrote=1; sleep "$gap" ;;
             2) ;;                     # unchanged channel
-            *) rc=1 ;;
+            4) rc=4 ;;
+            3) [ $rc = 4 ] || rc=3 ;;
+            *) [ $rc = 0 ] && rc=1 ;;
         esac
     done
     unlock
 
-    [ $wrote = 1 ] && state_set last_t_gainset "$(now)"
+    # A failed attempt also starts the interval, so a monitor that keeps refusing isn't
+    # retried on every sample (each attempt counts against the daily cap).
+    if [ $wrote = 1 ] || [ $rc = 1 ]; then state_set last_t_gainset "$(now)"; fi
+    # Nothing left to retry once written, or once capped for the day.
+    if [ $rc = 0 ] || [ $rc = 3 ]; then state_set gains_pending 0; fi
     return $rc
 }
 

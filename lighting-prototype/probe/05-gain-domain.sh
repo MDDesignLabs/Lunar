@@ -4,7 +4,8 @@
 # Uses the TSL2591 you already own as the meter. No colorimeter needed.
 # Two gains at 0 + full-screen white = one primary only, so the sensor sees a fixed
 # spectrum and its reading is proportional to that channel's output.
-# Takes ~15 minutes. Cost: ~35 gain writes.
+# Takes ~15 minutes. Cost: 44 m1ddc writes (39 gain settings + brightness set/restore),
+# each sent twice by stock m1ddc, so ~88 DDC packets.
 . "$(dirname "$0")/lib.sh"
 need_m1ddc; require_lunar_quiet; require_baseline
 OUT=05-gain-domain.txt; : > "$RESULTS/$OUT"
@@ -16,7 +17,7 @@ ID="${SENSOR_ID:-sensor-ambient_light}"
 PATCH="${WHITEPATCH:-$TOOLS/whitepatch}"
 PROBE_BRIGHTNESS="${PROBE_BRIGHTNESS:-80}"   # brighter backlight = more signal over room light; restored after
 
-if [ ! -x "$PATCH" ]; then
+if [ ! -x "$PATCH" ] || [ "$PROBE_DIR/../helpers/whitepatch.swift" -nt "$PATCH" ]; then
     swiftc -O -o "$PATCH" "$PROBE_DIR/../helpers/whitepatch.swift" 2>"$RESULTS/whitepatch-build.log" || {
         echo "Couldn't build the white-screen helper (see results/whitepatch-build.log)."; exit 1; }
 fi
@@ -26,8 +27,9 @@ note "1. Room as dark as you can make it: blinds closed, lights off, phone/lapto
 note "2. AOC OSD: colour mode = User; DCR/Dynamic Contrast OFF; Eco modes OFF; Low Blue Light OFF."
 note "   macOS: Night Shift OFF, HDR OFF for this display."
 note "3. The sensor's window must face the glass, flat and centred, within ~5 mm, and not move."
-note "4. When you press Enter, the WHOLE monitor turns white for ~16 minutes. That's the"
-note "   measurement: don't touch anything. Click the white screen only if you need to abort."
+note "4. When you press Enter, the WHOLE monitor turns white for ~16 minutes, covering"
+note "   Terminal too, with no progress shown. That's the measurement: don't touch anything."
+note "   To abort: click the white screen. The probe notices, stops, and restores the monitor."
 pause "Sensor in place? Press Enter to start"
 
 orig_l="$(baseline_get luminance)"; orig_l="${orig_l:-50}"
@@ -46,6 +48,24 @@ m1 set luminance "$PROBE_BRIGHTNESS" >/dev/null
 "$PATCH" & PATCH_PID=$!
 sleep 2
 
+# Stop cleanly if the white window was closed (a click on it = abort): every later
+# reading would measure the desktop, and the analysis would still print a verdict.
+patch_check() {
+    if [ -n "$PATCH_PID" ] && ! kill -0 "$PATCH_PID" 2>/dev/null; then
+        PATCH_PID=""
+        record $OUT "ABORTED: the white screen was closed, so no result. Rerun when ready."
+        exit 1
+    fi
+}
+NANS=0
+nan_check() {  # nan_check <value>: two failed readings in a row = the sensor is gone
+    case "$1" in nan*) NANS=$(( NANS + 1 )) ;; *) NANS=0 ;; esac
+    if [ $NANS -ge 2 ]; then
+        record $OUT "ABORTED: no readings from the sensor ($SENSOR_URL). Check it's powered and on Wi-Fi, then rerun."
+        exit 1
+    fi
+}
+
 measure() {  # measure <channel> <gain> → appends CSV row, prints the value
     sleep "$SETTLE"
     local v; v="$(sse_avg "$ID" "$WINDOW")"
@@ -59,8 +79,8 @@ echo "channel,gain,lux" > "$CSV"
 
 # ── Preflight (~40 s): can the sensor actually see the screen?
 say "Preflight: white vs black"
-gains 50 50 50; white="$(measure white 50)"
-gains 0 0 0;    black="$(measure floor 0)"
+gains 50 50 50; white="$(measure white 50)"; patch_check
+gains 0 0 0;    black="$(measure floor 0)"; patch_check
 if ! awk -v w="$white" -v b="$black" 'BEGIN { exit !(w != "nan" && b != "nan" && w - b > 20 && w > 5 * b) }'; then
     kill "$PATCH_PID" 2>/dev/null; PATCH_PID=""
     record $OUT "PREFLIGHT FAILED: white screen = $white lux, black screen = $black lux."
@@ -74,14 +94,14 @@ record $OUT "preflight ok: white $white lux vs black $black lux"
 # ── Sweep. Floor re-measured before each channel, so room-light drift is tracked.
 for ch in red green blue; do
     say "Channel $ch (others at 0)"
-    gains 0 0 0; measure floor 0 >/dev/null
+    v="$(measure floor 0)"; patch_check; nan_check "$v"      # all gains are already 0 here
     for g in 50 40 30 20 45 36 25 55 60 50; do
         m1 set $ch $g >/dev/null
-        measure $ch $g >/dev/null
+        v="$(measure $ch $g)"; patch_check; nan_check "$v"
     done
     m1 set $ch 0 >/dev/null
 done
-gains 0 0 0; measure floor 0 >/dev/null
+measure floor 0 >/dev/null; patch_check
 kill "$PATCH_PID" 2>/dev/null; PATCH_PID=""
 
 say "Analysis"

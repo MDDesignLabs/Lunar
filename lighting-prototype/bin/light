@@ -18,11 +18,14 @@
 
 lf_now() { state_get filtered "2"; }   # 2 = 100 lux, used only if the daemon has never run
 
+trap unlock EXIT                      # never leave the DDC lock behind (unlock checks ownership)
+trap 'exit 130' INT TERM
+
 neutral() {
     IFS=: read -r r g b <<EOF
 $CRITICAL_GAINS
 EOF
-    ddc_gains "$r" "$g" "$b" 1
+    ddc_gains "$r" "$g" "$b" 1 neutral
 }
 
 case "$1" in
@@ -39,11 +42,16 @@ case "$1" in
                 # to its learned curve unless the display is paused (Display.swift:6620).
                 "$LUNAR" displays "$LUNAR_DISPLAY" adaptivePaused true >/dev/null 2>&1
             fi
-            apply_targets "$(lf_now)" 1
+            rc=0; apply_targets "$(lf_now)" 1 || rc=$?
+            if [ $rc != 0 ]; then
+                log "override ON but INCOMPLETE (rc $rc)"
+                echo "Colour-critical: ON, but NOT neutral yet: $(gain_rc_reason $rc)." >&2
+                exit 1
+            fi
             log "override ON"
             echo "Colour-critical: ON (6500K, gains $CRITICAL_GAINS${CRITICAL_BRIGHTNESS:+, brightness $CRITICAL_BRIGHTNESS})"
         else
-            state_set mode adaptive
+            state_set mode adaptive; state_set critical_rc 0
             if [ "$BACKEND" = lunar ] && [ -n "$CRITICAL_BRIGHTNESS" ]; then
                 "$LUNAR" displays "$LUNAR_DISPLAY" adaptivePaused false >/dev/null 2>&1
             fi
@@ -53,6 +61,11 @@ case "$1" in
         fi
         ;;
     brighter|dimmer|offset)
+        if [ "$BACKEND" = lunar ]; then
+            echo "With BACKEND=lunar, Lunar owns brightness: use Lunar's own slider instead." >&2; exit 64
+        fi
+        n="${2:-0}"; n="${n#-}"
+        case "$n" in ''|*[!0-9]*) echo "usage: light $1 [n]  (n is a whole number)" >&2; exit 64 ;; esac
         cur="$(state_get bright_offset 0)"
         case "$1" in
             brighter) new=$(( cur + ${2:-5} )) ;;
@@ -62,25 +75,27 @@ case "$1" in
         [ "$new" -gt 50 ] && new=50; [ "$new" -lt -50 ] && new=-50
         state_set bright_offset "$new"
         state_set bright_offset_lf "$(lf_now)"
-        if [ "$BACKEND" = lunar ]; then
-            echo "With BACKEND=lunar, Lunar owns brightness: use Lunar's own slider instead." >&2; exit 64
-        fi
         apply_targets "$(lf_now)" 1
         echo "brightness offset ${new} → $(state_get last_brightness '?')"
         ;;
     kelvin)
-        [ -z "$2" ] && { echo "usage: light kelvin <K>" >&2; exit 64; }
+        case "$2" in ''|*[!0-9]*) echo "usage: light kelvin <K>" >&2; exit 64 ;; esac
+        if [ "$(current_mode)" = critical ]; then
+            echo "Colour-critical is ON: turn it off first (light critical off)." >&2; exit 1
+        fi
         eval "$(awk -f "$ENGINE" -v cmd=targets -v lf=2 -v mode=adaptive -v actual_b=0 \
             -v curve="$BRIGHTNESS_CURVE" -v bmin=0 -v bmax=100 -v comp=0 -v gamma=1 \
-            -v kdim_lux=1 -v kdim="$2" -v kbright_lux=10 -v kbright="$2" -v kstep=1 \
+            -v kdim_lux=1 -v kdim="$2" -v kbright_lux=10 -v kbright="$2" -v kstep=1 -v kfloor="$KELVIN_FLOOR" \
             -v table="$GAIN_TABLE" -v critical_gains="$CRITICAL_GAINS" \
             -v nits_min=0 -v nits_max=1 -v bias_k=0 -v bias_min=0 -v bias_max=0 \
             | grep -E '^(red|green|blue)=')"
-        ddc_gains "$red" "$green" "$blue" 1
+        ddc_gains "$red" "$green" "$blue" 1 || { echo "not written: $(gain_rc_reason $?)" >&2; exit 1; }
+        [ "$2" -lt "${KELVIN_FLOOR:-0}" ] && echo "(${2}K is below KELVIN_FLOOR; used ${KELVIN_FLOOR}K)"
         echo "gains for ${2}K: $red/$green/$blue"
         ;;
     neutral)
-        neutral; echo "neutral: $CRITICAL_GAINS"
+        neutral || { echo "not written: $(gain_rc_reason $?)" >&2; exit 1; }
+        echo "neutral: $CRITICAL_GAINS"
         ;;
     bias)
         [ -z "$2" ] && { echo "usage: light bias <pct> [K]" >&2; exit 64; }
@@ -88,7 +103,8 @@ case "$1" in
         echo "bias ${2}% ${3:-6500}K → ${GOVEE_IPS:-<no GOVEE_IPS set>}"
         ;;
     status)
-        echo "mode:      $(current_mode)   backend: $BACKEND   lux source: $LUX_SOURCE"
+        m="$(current_mode)"; [ "$m" = critical ] && [ "$(state_get critical_rc 0)" != 0 ] && m="critical (INCOMPLETE: gains not neutral yet)"
+        echo "mode:      $m   backend: $BACKEND   lux source: $LUX_SOURCE"
         echo "lux:       $(state_get lux '?') (filtered log10: $(state_get filtered '?'))"
         echo "target:    $(state_get target '?')"
         echo "offset:    $(state_get bright_offset 0) (brightness nudge)   display: $(display_state)"

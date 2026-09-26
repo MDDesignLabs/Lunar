@@ -9,8 +9,10 @@ lunar_brightness() {
 }
 
 # apply_targets <filtered_log10_lux> [force]
+# In critical mode returns the gain write's code (0 = neutral is on the monitor) and
+# stores it as state "critical_rc", so `light`, lightd and the menu bar can tell.
 apply_targets() {
-    local lf="$1" force="${2:-0}" mode actual_b k v
+    local lf="$1" force="${2:-0}" mode actual_b k v rc=0
     local kelvin=6500 brightness=0 red=50 green=50 blue=50 bias=0
     mode="$(current_mode)"
 
@@ -37,15 +39,27 @@ $(engine_targets "$lf" "$mode" "$actual_b")
 EOF
 
     if [ "$mode" = critical ]; then
-        # The override is never rate-limited. No-op skipping still applies.
-        ddc_gains "$red" "$green" "$blue" 1
+        # The override is never rate-limited, and may use the neutral reserve past the
+        # daily cap. No-op skipping still applies.
+        ddc_gains "$red" "$green" "$blue" 1 neutral || rc=$?
+        state_set critical_rc "$rc"
         if [ -n "$CRITICAL_BRIGHTNESS" ]; then ddc_brightness "$brightness" 1; fi
     else
-        ddc_gains "$red" "$green" "$blue" "$force"
+        ddc_gains "$red" "$green" "$blue" "$force" adaptive
         if [ "$BACKEND" = m1ddc ]; then ddc_brightness "$brightness" "$force"; fi
     fi
     govee_apply "$bias" "$kelvin" "$force"
 
     state_set target "kelvin=$kelvin brightness=$brightness gains=$red/$green/$blue bias=$bias mode=$mode"
     state_set kelvin "$kelvin"
+    return $rc
+}
+
+# Why a gain write didn't land, for people.
+gain_rc_reason() {
+    case "$1" in
+        4) echo "another app ($(other_ddc_app || echo 'Lunar, BetterDisplay or MonitorControl')) is controlling the monitor. Quit it and run this again" ;;
+        3) echo "today's write allowance is used up, including the neutral reserve. Set the OSD to User 50/50/50 by hand" ;;
+        *) echo "the monitor didn't accept the write (see ~/.lighting/lightd.log)" ;;
+    esac
 }

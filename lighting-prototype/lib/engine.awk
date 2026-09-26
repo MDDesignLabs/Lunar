@@ -43,9 +43,10 @@ function smoothstep(t) { t = clamp(t, 0, 1); return t * t * (3 - 2 * t) }
 
 function kelvin_for(lf,    lo, hi, t, k) {
     lo = log10(kdim_lux); hi = log10(kbright_lux)
-    t = smoothstep((lf - lo) / (hi - lo))
+    t = (hi == lo) ? (lf >= hi) : smoothstep((lf - lo) / (hi - lo))
     k = kdim + t * (kbright - kdim)
-    return round(k / kstep) * kstep
+    k = round(k / kstep) * kstep
+    return (kfloor != "" && k < kfloor + 0) ? kfloor + 0 : k
 }
 
 # Interpolate R:G:B from the calibration table "K:R:G:B,..." (any order).
@@ -98,6 +99,10 @@ BEGIN {
         } else {
             k = kelvin_for(lf)
             gains_for(k)
+            # Never above neutral on any channel, whatever the table says.
+            if (gr > cg[1] + 0) gr = cg[1] + 0
+            if (gg > cg[2] + 0) gg = cg[2] + 0
+            if (gb > cg[3] + 0) gb = cg[3] + 0
             b = curve_eval(curve, lf) + boffset
             if (actual_b != "") {
                 # Lunar owns brightness: report its value, only use it for the bias light.

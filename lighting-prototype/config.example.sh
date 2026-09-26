@@ -46,6 +46,7 @@ KELVIN_DIM=5000
 KELVIN_BRIGHT_LUX=300
 KELVIN_BRIGHT=6500
 KELVIN_STEP=250
+KELVIN_FLOOR=4000                 # never warmer than this, whatever the table or `light kelvin` asks
 KELVIN_MIN_INTERVAL=600           # seconds between adaptive gain sets
 GAIN_DAILY_CAP=30                 # per channel (conservative)
 GAIN_GAP_MS=100                   # pause between the R, G and B writes in one set
@@ -58,7 +59,9 @@ GAIN_TABLE="6500:50:50:50,5500:50:47:44,5000:50:46:40,4500:50:44:36"
 GAIN_GAMMA=2.2
 
 # ── Colour-critical override ───────────────────────────────────────────────
-CRITICAL_GAINS="50:50:50"         # calibrated D65 neutral (R:G:B)
+CRITICAL_GAINS="50:50:50"         # calibrated D65 neutral (R:G:B). Adaptive gains never go above it
+OVERRIDE_RESERVE=10               # writes per channel per day kept back for returning to neutral
+                                  # (override, neutral on exit/crash) after the adaptive cap is hit
 CRITICAL_BRIGHTNESS=40            # freeze backlight here; empty = leave brightness alone.
                                   # With BACKEND=lunar the override sets Lunar's per-display
                                   # "Adaptive brightness paused" first, so this write isn't

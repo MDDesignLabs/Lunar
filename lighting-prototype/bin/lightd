@@ -45,17 +45,27 @@ kill_tree() {
 cleanup() {
     [ -n "$STREAM_PID" ] && kill_tree "$STREAM_PID"
     rm -f "$FIFO"
+    unlock                    # if the signal arrived mid-write, release our own lock first
     if [ "$NEUTRAL_ON_EXIT" = 1 ]; then
         log "exit: writing neutral gains so the monitor isn't left warm"
         IFS=: read -r r g b <<EOF
 $CRITICAL_GAINS
 EOF
-        ddc_gains "$r" "$g" "$b" 1
+        ddc_gains "$r" "$g" "$b" 1 neutral
     fi
     state_set running 0
     rm -f "$STATE/lightd.pid"
     exit 0
 }
+
+# One lightd at a time: a second copy would share (and fight over) the same state.
+other="$(cat "$STATE/lightd.pid" 2>/dev/null)"
+if [ -n "$other" ] && [ "$other" != $$ ] && kill -0 "$other" 2>/dev/null \
+    && ps -p "$other" -o command= 2>/dev/null | grep -q lightd; then
+    echo "lightd is already running (pid $other). Stop it first:" >&2
+    echo "  launchctl bootout gui/\$(id -u)/com.lighting.lightd 2>/dev/null; kill $other" >&2
+    exit 1
+fi
 trap cleanup INT TERM
 
 if [ "$(state_get running 0)" = 1 ]; then
@@ -64,7 +74,7 @@ if [ "$(state_get running 0)" = 1 ]; then
     IFS=: read -r r g b <<EOF
 $CRITICAL_GAINS
 EOF
-    ddc_gains "$r" "$g" "$b" 1
+    ddc_gains "$r" "$g" "$b" 1 neutral
 fi
 state_set running 1
 echo $$ > "$STATE/lightd.pid"     # lets the probes (and you) check whether lightd is running
@@ -85,17 +95,26 @@ while true; do
 
     got_any=0
     while read -r -t "$STALE_SECS" lux; do
-        case "$lux" in ''|*[!0-9.eE+-]*) continue ;; esac
+        # Numbers only. A negative value (Lunar's -1 without Pro) is "no reading", not darkness.
+        case "$lux" in ''|-*|*[!0-9.eE+-]*) continue ;; esac
+        case "$lux" in *[0-9]*) ;; *) continue ;; esac
         got_any=1; backoff=1
         t="$(now)"; dt=$(( t - last_t )); [ $dt -lt 1 ] && dt=1
         force=0
 
         if [ $dt -gt "$WAKE_GAP" ]; then
-            log "gap of ${dt}s: assuming wake from sleep; waiting ${WAKE_DELAY}s, then reapplying once"
-            sleep "$WAKE_DELAY"
-            ddc_invalidate
-            force=1
-            prev_lf=""            # don't filter across a sleep; start from the current room
+            woke="$(last_wake)"
+            if [ -n "$woke" ] && [ "$woke" -lt "$last_t" ]; then
+                # The Mac didn't sleep: the sensor dropped out. Keep the no-op skip, so
+                # unchanged values aren't rewritten after every Wi-Fi hiccup.
+                log "gap of ${dt}s without sleep (sensor dropout): resuming"
+            else
+                log "gap of ${dt}s: assuming wake from sleep; waiting ${WAKE_DELAY}s, then reapplying once"
+                sleep "$WAKE_DELAY"
+                ddc_invalidate
+                force=1
+            fi
+            prev_lf=""            # don't filter across the gap; start from the current room
         fi
         last_t="$t"
 
@@ -121,7 +140,13 @@ while true; do
         moved="$(awk -v a="$prev_lf" -v b="$acted_lf" -v d="$LUX_DEADBAND" \
             'BEGIN { x = a - b; if (x < 0) x = -x; print (b == "" || x >= d) ? 1 : 0 }')"
 
-        if [ "$moved" = 1 ] || [ "$force" = 1 ] || [ "$mode" != "$acted_mode" ]; then
+        # Also retry: a gain set deferred by KELVIN_MIN_INTERVAL, and an override that was
+        # blocked by another DDC app (rc 4; nothing is counted until it can be written).
+        retry=0
+        [ "$mode" = adaptive ] && [ "$(state_get gains_pending 0)" = 1 ] && retry=1
+        [ "$mode" = critical ] && [ "$(state_get critical_rc 0)" = 4 ] && retry=1
+
+        if [ "$moved" = 1 ] || [ "$force" = 1 ] || [ "$retry" = 1 ] || [ "$mode" != "$acted_mode" ]; then
             apply_targets "$prev_lf" "$force"
             acted_lf="$prev_lf"; acted_mode="$mode"
             state_set acted "$acted_lf"

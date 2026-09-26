@@ -1,10 +1,17 @@
 #!/bin/bash
 # Mock m1ddc: records every call; keeps per-control values in $MOCK_DIR.
 # MOCK_FAIL=1 makes writes fail (display asleep / DDC error).
+# Like the real CLI (waydabber/m1ddc sources/m1ddc.m), unknown controls or a missing
+# value print "Invalid command!" and exit 1.
 echo "m1ddc $*" >> "$MOCK_DIR/calls.log"
-[ "$1" = display ] && shift 2
+if [ "$1" = display ]; then
+    [ "$2" = list ] && { echo "[1] CU34G4Z (mock)"; exit 0; }
+    shift 2
+fi
+case "$2" in luminance|contrast|red|green|blue|volume) ;; *) echo "Invalid command!"; exit 1 ;; esac
 case "$1" in
     set)
+        case "$3" in ''|*[!0-9]*) echo "Invalid command!"; exit 1 ;; esac
         [ "$MOCK_FAIL" = 1 ] && exit 1
         # MOCK_DROP_SINGLE=1: a monitor that ignores every other single-sent write
         if [ "$(basename "$0")" = m1ddc-1x ] && [ "$MOCK_DROP_SINGLE" = 1 ]; then
@@ -14,5 +21,5 @@ case "$1" in
         echo "$3" > "$MOCK_DIR/m1ddc_$2" ;;
     get) cat "$MOCK_DIR/m1ddc_$2" 2>/dev/null || echo 50 ;;
     max) echo 100 ;;
-    display) echo "[1] CU34G4Z (mock)" ;;
+    *) echo "Invalid command!"; exit 1 ;;
 esac

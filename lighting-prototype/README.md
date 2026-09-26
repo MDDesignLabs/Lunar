@@ -23,17 +23,17 @@ Dependencies:
 
 ## 1. Probe your hardware first (about 1 hour of hands-on time plus a 24 h log)
 
-Run these in Terminal, in order. Each writes `probe/results/NN-*.txt` ending in a `RESULT` line.
+Run these in Terminal, in order. Each writes `probe/results/NN-*.txt` ending in a `RESULT` line. That folder is git-ignored (it's your machine's data), and the test suite never touches it: tests write to a temp folder via `PROBE_RESULTS`. The probes refuse to run while Lunar, BetterDisplay, MonitorControl or `lightd` is running.
 
 | Probe | Answers | Needs | Time |
 |---|---|---|---|
 | `probe/00-setup.sh` | Tools; builds m1ddc stock (2 writes) and `m1ddc-1x` (1 write); lists displays and sensor IDs | Command Line Tools | 3 min |
 | `probe/01-cli-audit.sh` | **Audit 1–2:** does `lunar lux` read your ESP32? Does `lunar displays external blueGain` write VCP 0x1A? | Lunar running | 2 min |
 | `probe/02-sensor-log.sh 24` | **Q6:** two SSE clients (this + Lunar) stable for 24 h? Also records your lux dataset (CSV) | Lunar running | 24 h, unattended |
-| `probe/03-ddc-read.sh` | **Q2:** do reads work and match the OSD? **Q4a:** gain max | Lunar quit | 2 min |
+| `probe/03-ddc-read.sh` | **Q2:** do reads work and match the OSD? **Q4a:** gain max. Records the baseline once; rerun with `--rebaseline` only if the monitor really is back at its original settings | Lunar quit | 2 min |
 | `probe/04-single-write.sh` | **Q1:** does the AOC need every write sent twice? | Lunar quit | 2–5 min |
-| `probe/05-gain-domain.sh` | **Q3:** linear-light or gamma-encoded gain? **Q4b:** headroom above 50? Prints what your gain rows *really* produce and a corrected `GAIN_TABLE` | Lunar quit, dark room, sensor taped to the screen | 15 min |
-| `probe/06-persistence.sh` | **Q5:** what resets gains (sleep, input, power)? **EEPROM:** how fast a write is committed (you pull the power cord 3×) | Lunar quit | 10 min |
+| `probe/05-gain-domain.sh` | **Q3:** linear-light or gamma-encoded gain? **Q4b:** headroom above 50? Prints what your gain rows *really* produce and a corrected `GAIN_TABLE`. The screen stays white ~16 min; click it to abort (the probe stops and restores the monitor) | Lunar quit, dark room, sensor taped to the screen | 16 min |
+| `probe/06-persistence.sh` | **Q5:** what resets gains (sleep, input)? Part B (pulling the power cord) runs only with `--with-power-cut`, and is skipped for this setup | Lunar quit | 10 min |
 | `probe/07-govee.sh` | **Q7:** discovery, port 4003 commands, Kelvin range | LAN Control on in the Govee app | 3 min |
 
 How probe 05 works without a colorimeter:
@@ -90,7 +90,8 @@ ln -s "$PWD/swiftbar/lighting.10s.sh" ~/SwiftBarPlugins/      # or whichever fol
 
 ## 4. Known limits (all tested against simulators only)
 
-- **Nothing here has touched the real AOC, ESP32 or Govee bars yet.** `test/run_tests.sh` proves the logic, packet formats, rate limits and probe analysis against simulators (44 checks). The probes are what prove the hardware.
-- **Local Network privacy (macOS 15+) may block `curl`/`nc` when started by launchd.** Terminal-launched runs inherit Terminal's permission; background agents may not get a prompt. `LUX_SOURCE=lunar` sidesteps it for the sensor, because Lunar already has the permission. Govee UDP may still be blocked. If `lightd.log` shows Govee sends but the strips don't react under launchd while `bin/govee` works from Terminal, this is why.
+- **Nothing here has touched the real AOC, ESP32 or Govee bars yet.** `test/run_tests.sh` proves the logic, packet formats, rate limits and probe analysis against simulators (82 checks, all passing (81 plus one SKIP on a machine with no multicast route)). The probes are what prove the hardware.
+- **Local Network privacy (macOS 15+) may block `curl`/`nc` when started by launchd.** Apple's TN3179 exempts tools run from Terminal and launchd *daemons*, but says launchd *agents* (how `install.sh` runs `lightd`) are not exempt (docs/lighting-app/RESEARCH_04 §2). After installing, check `lightd.log` for live lux; if none arrive, run `bin/lightd` from Terminal instead. `LUX_SOURCE=lunar` sidesteps it for the sensor, because Lunar already has the permission. Govee UDP may still be blocked. If `lightd.log` shows Govee sends but the strips don't react under launchd while `bin/govee` works from Terminal, this is why.
 - `lunar lux --listen` only emits when the value changes. In a perfectly steady room that looks like a stale sensor, and `lightd` reconnects every `STALE_SECS`. That's why the default `STALE_SECS` is 300; with `LUX_SOURCE=sse`, 60 is enough.
+- **Daily write caps also bound the override, with a reserve.** Adaptive writes stop at `BRIGHTNESS_DAILY_CAP` / `GAIN_DAILY_CAP`. Writes back to neutral (the override, neutral on exit or after a crash) may use `OVERRIDE_RESERVE` more per channel. If even that is used up, or another DDC app is running, `light critical on` exits 1 and says why, and the menu bar shows "NOT neutral" instead of the override icon.
 - White point has no learning. You edit the curve in config. Brightness learning comes from Lunar in `lunar` mode only.
