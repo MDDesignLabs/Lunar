@@ -39,6 +39,10 @@ This is the `BRIGHTNESS_CURVE` the local session derived from Lunar's saved sett
    - **Missing seed values show where a correction was made nearby**: Lunar deletes neighbours that would break ordering when it inserts a correction.
    - The recovered curve keeps every seed value from 100 lux up, and is missing 13–80. So the learning, if any, is in the low-light range.
    - Tell the user which points are learned and which are seed, rather than calling it all training.
+   - **A quick test:** Lunar records a manual correction as a *new* point at the lux you were in, rounded to 4 decimals. So if the curve has exactly the 16 seed lux values and nothing else, Lunar probably never recorded a correction.
+     - The y values then come from Lunar's own nits-to-percent conversion. That conversion is encrypted and not linear, so "the values are above a linear estimate" is not evidence of learning.
+     - The one thing this can't rule out: the encrypted insert function (with its "cliff" parameters) might also adjust neighbouring points.
+   - **Write the curve into `~/.lighting/config.sh` straight from the parsed data. Never retype or copy it from the chat:** the user's pastes of terminal output drop characters. Then check it by machine: every entry is `number:number`, lux values ascend, and the count matches the source.
 3. **The targets are percentages of Lunar's min–max brightness range.** Check `minDDCBrightness` and `maxDDCBrightness` for the AOC in the same export. If they aren't 0 and 100, rescale before use.
 
 ## To do, in order
