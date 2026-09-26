@@ -53,6 +53,7 @@ EOF
         ddc_gains "$r" "$g" "$b" 1
     fi
     state_set running 0
+    rm -f "$STATE/lightd.pid"
     exit 0
 }
 trap cleanup INT TERM
@@ -66,6 +67,7 @@ EOF
     ddc_gains "$r" "$g" "$b" 1
 fi
 state_set running 1
+echo $$ > "$STATE/lightd.pid"     # lets the probes (and you) check whether lightd is running
 log "lightd start: backend=$BACKEND lux=$LUX_SOURCE mode=$(current_mode)"
 
 prev_lf="$(state_get filtered "")"

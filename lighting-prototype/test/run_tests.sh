@@ -179,6 +179,12 @@ check "…and it stops before the sweep (no per-channel rows written)" "! grep -
 check "…and still restores the baseline gains" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
 check "…and puts brightness back to the baseline (60)" "[ \$(cat \$MOCK_DIR/m1ddc_luminance) = 60 ]"
 probe_env
+sleep 3600 & FAKE_LIGHTD=$!; PIDS="$PIDS $FAKE_LIGHTD"
+mkdir -p "$LIGHT_HOME/state"; echo $FAKE_LIGHTD > "$LIGHT_HOME/state/lightd.pid"
+res="$(yes "" | bash probe/04-single-write.sh 2>&1)"
+check "a pid file pointing at a non-lightd process doesn't block the probes" "! echo \"\$res\" | grep -q 'lightd (the adaptive loop) is running'"
+kill $FAKE_LIGHTD
+probe_env
 res="$(yes "" | bash probe/04-single-write.sh 2>&1)"
 check "probe 04: monitor that accepts single writes → 'takes single writes'" "echo \"\$res\" | grep -q 'RESULT Q1: NO'"
 check "probe 04 puts blue back to the baseline (44)" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
