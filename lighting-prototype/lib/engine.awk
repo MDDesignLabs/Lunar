@@ -11,13 +11,23 @@ function clamp(x, lo, hi) { return x < lo ? lo : (x > hi ? hi : x) }
 function round(x) { return int(x + (x < 0 ? -0.5 : 0.5)) }
 
 # Piecewise-linear interpolation over "x:y,x:y" pairs, x given in lux, evaluated in log10(lux).
-function curve_eval(spec, lf,    n, i, pts, kv, xs, ys, t) {
-    n = split(spec, pts, ",")
-    for (i = 1; i <= n; i++) {
-        split(pts[i], kv, ":")
-        xs[i] = log10(kv[1] < 0.1 ? 0.1 : kv[1])
-        ys[i] = kv[2] + 0
+# Malformed entries (no ":" or non-numeric) are skipped and the rest sorted by lux, so a
+# pasting mistake can't create a bogus point or break the ordering.
+function curve_eval(spec, lf,    raw, pts, kv, xs, ys, n, i, j, t, tx, ty) {
+    raw = split(spec, pts, ",")
+    n = 0
+    for (i = 1; i <= raw; i++) {
+        if (split(pts[i], kv, ":") != 2) continue
+        if (kv[1] !~ /^[0-9.]+$/ || kv[2] !~ /^-?[0-9.]+$/) continue
+        n++
+        xs[n] = log10(kv[1] < 0.1 ? 0.1 : kv[1]); ys[n] = kv[2] + 0
     }
+    if (n == 0) return 50
+    for (i = 2; i <= n; i++)
+        for (j = i; j > 1 && xs[j - 1] > xs[j]; j--) {
+            tx = xs[j]; xs[j] = xs[j - 1]; xs[j - 1] = tx
+            ty = ys[j]; ys[j] = ys[j - 1]; ys[j - 1] = ty
+        }
     if (lf <= xs[1]) return ys[1]
     if (lf >= xs[n]) return ys[n]
     for (i = 1; i < n; i++) {

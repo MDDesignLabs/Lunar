@@ -58,6 +58,8 @@ check "colour-critical ignores lux: 5 lux → 6500K 50/50/50" \
 b_nocomp="$(LUMINANCE_COMPENSATION=0 engine_targets 1 adaptive | sed -n 's/brightness=//p')"
 b_comp="$(engine_targets 1 adaptive | sed -n 's/brightness=//p')"
 check "luminance compensation raises backlight when warm ($b_nocomp → $b_comp)" "[ $b_comp -gt $b_nocomp ]"
+check "a malformed or out-of-order curve entry is ignored, not read as 0%" \
+    "[ \$(BRIGHTNESS_CURVE='0:21,134,100:45,1000:100' LUMINANCE_COMPENSATION=0 engine_targets 2 adaptive | sed -n 's/brightness=//p') = 45 ]"
 check "bias follows Lunar's actual brightness when Lunar owns it" \
     "[ \$(t 2 adaptive 100 | sed -n 's/bias=//p') -gt \$(t 2 adaptive 10 | sed -n 's/bias=//p') ]"
 

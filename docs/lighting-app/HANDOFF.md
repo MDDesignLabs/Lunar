@@ -28,6 +28,19 @@ For a Claude session running **on the user's Mac** (Desktop app or `claude remot
   (`plistlib` rather than `plutil -convert json`: the latter fails if any saved setting holds binary data.)
   Look for `sensorBrightnessMapping` (lux → brightness %) inside the display entries. If it's there, turn it into `BRIGHTNESS_CURVE`.
 
+## Review notes on the recovered curve
+
+This is the `BRIGHTNESS_CURVE` the local session derived from Lunar's saved settings.
+
+1. **The pasted string had a malformed entry**: `134` with no colon. Print the raw `sensorBrightnessMapping` again and rebuild the string exactly. `lib/engine.awk` now skips malformed entries and sorts points, so a bad entry can't read as 0%, but the value should still be recovered.
+2. **Most of it is probably Lunar's default starting curve, not two weeks of learning.**
+   - On Apple Silicon, when a display has no curve yet, Lunar seeds `sensorBrightnessMapping` from `nitsToPercentageMapping` (`Display.swift:576–580`). That seed uses exactly these lux values, from `LUX_TO_NITS`: 0, 13, 23, 39, 71, 80, 100, 135, 160, 190, 224, 313, 565, 702, 800, 1000.
+   - **Learned points are the ones whose lux value is NOT in that list.**
+   - **Missing seed values show where a correction was made nearby**: Lunar deletes neighbours that would break ordering when it inserts a correction.
+   - The recovered curve keeps every seed value from 100 lux up, and is missing 13–80. So the learning, if any, is in the low-light range.
+   - Tell the user which points are learned and which are seed, rather than calling it all training.
+3. **The targets are percentages of Lunar's min–max brightness range.** Check `minDDCBrightness` and `maxDDCBrightness` for the AOC in the same export. If they aren't 0 and 100, rescale before use.
+
 ## To do, in order
 
 1. `git pull`, then `bash lighting-prototype/probe/00-setup.sh`. Check the licence line (should be INACTIVE) and the helper line (should be built).
