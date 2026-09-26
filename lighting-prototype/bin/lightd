@@ -11,8 +11,6 @@
 . "$PROTO_DIR/lib/govee.sh"
 . "$PROTO_DIR/lib/apply.sh"
 
-WAKE_GAP="${WAKE_GAP:-90}"        # seconds without a sample that count as "we were asleep"
-WAKE_DELAY="${WAKE_DELAY:-8}"     # wait this long after wake before touching DDC
 NEUTRAL_ON_EXIT="${NEUTRAL_ON_EXIT:-1}"
 
 FIFO="$STATE/lux.fifo"
@@ -78,6 +76,12 @@ EOF
 fi
 state_set running 1
 echo $$ > "$STATE/lightd.pid"     # lets the probes (and you) check whether lightd is running
+ddc_prune_counts
+# The override is restored first, before any lux sample arrives (the sensor may be offline).
+if [ "$(current_mode)" = critical ]; then
+    log "override is ON: restoring neutral before reading the sensor"
+    apply_targets "$(state_get filtered 2)" 1 || log "override not restored yet (rc $?); retrying as samples arrive"
+fi
 log "lightd start: backend=$BACKEND lux=$LUX_SOURCE mode=$(current_mode)"
 
 prev_lf="$(state_get filtered "")"

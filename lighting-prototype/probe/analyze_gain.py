@@ -102,16 +102,30 @@ class Response:
 
 
 def analyse(rows, table, prim):
+    # Rows are in measurement order. Each channel uses the floor (all gains 0) measured
+    # most recently before it, so slow room-light drift between channels is tracked.
     by = defaultdict(lambda: defaultdict(list))
+    floors, cur, white = {}, None, None
     for ch, g, lux in rows:
+        if ch == "floor":
+            cur = lux
+        elif ch == "white":
+            white = lux
+        else:
+            floors.setdefault(ch, cur)
         by[ch][g].append(lux)
-    if "floor" not in by:
+    if cur is None:
         sys.exit("no floor measurement")
-    floor = statistics.mean(by["floor"][0] if 0 in by["floor"] else sum(by["floor"].values(), []))
     report, resp, gammas = [], {}, {}
+    if white and floors.get("red") is not None and white > 0 and floors["red"] / white > 0.05:
+        report.append(f"WARNING: black screen reads {floors['red'] / white * 100:.0f}% of white. Above ~5% the "
+                      "floor subtraction is approximate (lux isn't additive); darken the room and rerun if you can.")
     for ch in ("red", "green", "blue"):
         if 50 not in by[ch]:
             sys.exit(f"no gain-50 reference for {ch}")
+        floor = floors.get(ch)
+        if floor is None:
+            floor = cur
         ref = statistics.mean(by[ch][50]) - floor
         if ref <= 0:
             sys.exit(f"{ch}: no signal above floor; is the sensor facing the screen?")
@@ -120,17 +134,21 @@ def analyse(rows, table, prim):
         resp[ch] = Response(pts)
         exps = [math.log(r) / math.log(g / 50) for g, r in pts if 0 < g < 45 and r > 0]
         gammas[ch] = statistics.median(exps) if exps else float("nan")
-        head = [(g, r) for g, r in pts if g > 50]
+        head = dict((g, r) for g, r in pts if g > 50)
         report.append(f"{ch:5s}: effective exponent {gammas[ch]:.2f}   "
                       f"(r at 40 = {resp[ch](40):.3f}; linear predicts 0.800, encoded 0.612)   "
                       f"reference drift {drift * 100:.1f}%")
         if head:
-            h = max(r for _, r in head)
-            report.append(f"       above 50: max output {h:.3f}× → "
-                          + ("HEADROOM exists above 50" if h > 1.03 else "no headroom: 50 is the ceiling (values above clip)"))
+            # Real headroom gives at least 1.1× at 55 and 1.2× at 60 (linear light; more if
+            # encoded). Demand clearly more than sensor noise: a few % isn't headroom.
+            r55, r60 = head.get(55, 0), head.get(60, 0)
+            has = r60 >= 1.10 and r55 >= 1.05
+            report.append(f"       above 50: {r55:.3f}× at 55, {r60:.3f}× at 60 → "
+                          + ("HEADROOM exists above 50" if has else "no headroom: 50 is the ceiling (values above clip)"))
 
     g_mean = 0.2126 * gammas["red"] + 0.7152 * gammas["green"] + 0.0722 * gammas["blue"]
-    verdict = ("LINEAR-LIGHT gain (≈1.0)" if g_mean < 1.4 else
+    verdict = ("INCOMPLETE (a channel has no usable readings below gain 45; rerun)" if math.isnan(g_mean) else
+               "LINEAR-LIGHT gain (≈1.0)" if g_mean < 1.4 else
                "GAMMA-ENCODED gain (≈2.2)" if g_mean > 1.8 else "IN BETWEEN (neither model; use the measured table)")
     report.append(f"\nRESULT Q3: {verdict}. Luminance-weighted exponent = {g_mean:.2f}")
 

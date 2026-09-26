@@ -108,7 +108,10 @@ BEGIN {
                 # Lunar owns brightness: report its value, only use it for the bias light.
                 b = actual_b
             } else if (comp == 1) {
-                y = rel_luminance(gr, gg, gb, cg[1], cg[2], cg[3])
+                # Compensate for the gains actually on the monitor (on_gains "r:g:b"), which
+                # differ from the targets while a gain set is deferred or capped.
+                if (split(on_gains, og, ":") == 3) y = rel_luminance(og[1], og[2], og[3], cg[1], cg[2], cg[3])
+                else y = rel_luminance(gr, gg, gb, cg[1], cg[2], cg[3])
                 if (y > 0) b = b / y
             }
         }

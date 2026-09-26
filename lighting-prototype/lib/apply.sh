@@ -12,7 +12,7 @@ lunar_brightness() {
 # In critical mode returns the gain write's code (0 = neutral is on the monitor) and
 # stores it as state "critical_rc", so `light`, lightd and the menu bar can tell.
 apply_targets() {
-    local lf="$1" force="${2:-0}" mode actual_b k v rc=0
+    local lf="$1" force="${2:-0}" mode actual_b k v rc=0 on
     local kelvin=6500 brightness=0 red=50 green=50 blue=50 bias=0
     mode="$(current_mode)"
 
@@ -46,7 +46,14 @@ EOF
         if [ -n "$CRITICAL_BRIGHTNESS" ]; then ddc_brightness "$brightness" 1; fi
     else
         ddc_gains "$red" "$green" "$blue" "$force" adaptive
-        if [ "$BACKEND" = m1ddc ]; then ddc_brightness "$brightness" "$force"; fi
+        if [ "$BACKEND" = m1ddc ]; then
+            on="$(state_get last_red "$red"):$(state_get last_green "$green"):$(state_get last_blue "$blue")"
+            if [ "$LUMINANCE_COMPENSATION" = 1 ] && [ "$on" != "$red:$green:$blue" ]; then
+                # Gains weren't (all) written: compensate for what the monitor really shows.
+                brightness="$(engine_targets "$lf" "$mode" "" "$on" | sed -n 's/^brightness=//p')"
+            fi
+            ddc_brightness "$brightness" "$force"
+        fi
     fi
     govee_apply "$bias" "$kelvin" "$force"
 

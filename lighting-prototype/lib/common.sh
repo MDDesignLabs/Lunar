@@ -36,7 +36,7 @@ lunar_get() {  # lunar_get <display-filter> <property>
 }
 
 state_get() { cat "$STATE/$1" 2>/dev/null || printf '%s' "$2"; }
-state_set() { printf '%s' "$2" > "$STATE/$1.tmp" && mv "$STATE/$1.tmp" "$STATE/$1"; }
+state_set() { printf '%s' "$2" > "$STATE/$1.tmp.$$" && mv "$STATE/$1.tmp.$$" "$STATE/$1"; }   # per-process temp: two writers can't clobber each other's
 
 # Integer absolute difference.
 absdiff() { local d=$(( $1 - $2 )); [ $d -lt 0 ] && d=$(( -d )); echo $d; }
@@ -71,9 +71,9 @@ unlock() { [ "$(cat "$STATE/.lock/pid" 2>/dev/null)" = "$$" ] && rm -rf "$STATE/
 last_wake() { sysctl -n kern.waketime 2>/dev/null | sed -n 's/.*sec = \([0-9]*\).*/\1/p'; }
 
 # Compute targets for a filtered log-lux value. Prints key=value lines.
-engine_targets() {
-    local lf="$1" mode="$2" actual_b="$3"
-    awk -f "$ENGINE" -v cmd=targets -v lf="$lf" -v mode="$mode" -v actual_b="$actual_b" \
+engine_targets() {  # <lf> <mode> [actual_b] [on_gains r:g:b]
+    local lf="$1" mode="$2" actual_b="$3" on_gains="$4"
+    awk -f "$ENGINE" -v cmd=targets -v lf="$lf" -v mode="$mode" -v actual_b="$actual_b" -v on_gains="$on_gains" \
         -v curve="$BRIGHTNESS_CURVE" -v bmin="$BRIGHTNESS_MIN" -v bmax="$BRIGHTNESS_MAX" \
         -v comp="$LUMINANCE_COMPENSATION" -v gamma="$GAIN_GAMMA" \
         -v kdim_lux="$KELVIN_DIM_LUX" -v kdim="$KELVIN_DIM" \

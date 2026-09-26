@@ -29,6 +29,10 @@ TAU_UP=8                          # seconds, room getting brighter
 TAU_DOWN=45                       # seconds, room getting darker
 LUX_DEADBAND=0.04                 # log10 units (~10%) before anything is recomputed
 
+# ── Sleep and wake ─────────────────────────────────────────────────────────
+WAKE_GAP=90                       # seconds without a sample that may mean the Mac slept
+WAKE_DELAY=8                      # after a wake, wait this long before touching DDC
+
 # ── Brightness (m1ddc backend only; with Lunar, Lunar's own curve is used) ─
 # lux:brightness% pairs, interpolated linearly in log10(lux).
 BRIGHTNESS_CURVE="0:10,10:20,40:35,100:50,300:70,1000:100"
@@ -37,6 +41,7 @@ BRIGHTNESS_MAX=100
 BRIGHTNESS_DEADBAND=2             # DDC units
 BRIGHTNESS_MIN_INTERVAL=60        # seconds between adaptive brightness writes (conservative)
 BRIGHTNESS_DAILY_CAP=200          # hard fuse: adaptive brightness stops for the day after this
+USER_MIN_GAP_MS=250               # user actions (nudges, override, presets): at most 4 writes/s per control
 OFFSET_RESET_DECADES=0.5          # a brighter/dimmer nudge is dropped when lux moves ~3× away
 LUMINANCE_COMPENSATION=1          # raise backlight to offset the dimming from warm gains
 
@@ -55,8 +60,10 @@ GAIN_GAP_MS=100                   # pause between the R, G and B writes in one s
 # Replace with the table probe 05 prints.
 GAIN_TABLE="6500:50:50:50,5500:50:47:44,5000:50:46:40,4500:50:44:36"
 # The AOC's effective gain exponent (1.0 = linear light, 2.2 = gamma-encoded).
-# Probe 05 measures it. Only used for luminance compensation.
-GAIN_GAMMA=2.2
+# Probe 05 measures it. Only used for luminance compensation. 1.0 until measured: if the
+# truth is 2.2 this under-compensates (screen slightly dim when warm); a guessed 2.2 could
+# over-brighten by ~9% at 5000K if the truth is 1.0.
+GAIN_GAMMA=1.0
 
 # ── Colour-critical override ───────────────────────────────────────────────
 CRITICAL_GAINS="50:50:50"         # calibrated D65 neutral (R:G:B). Adaptive gains never go above it

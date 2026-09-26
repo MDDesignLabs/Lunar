@@ -25,6 +25,12 @@ other_ddc_app() {
     return 1
 }
 
+# Apps that must not run alongside this backend.
+ddc_rivals() {
+    if [ "$BACKEND" = lunar ]; then echo "$OTHER_DDC_APPS" | tr ' ' '\n' | grep -vx Lunar | tr '\n' ' '
+    else echo "$OTHER_DDC_APPS"; fi
+}
+
 backend_write() {
     local vcp="$1" value="$2" name
     name="$(vcp_name "$vcp")"
@@ -65,7 +71,8 @@ ddc_write() {
         if [ $(( $(now) - last_t )) -lt "$interval" ]; then return 2; fi
     fi
 
-    if [ "$BACKEND" = m1ddc ] && app="$(other_ddc_app)"; then
+    # With BACKEND=lunar, Lunar itself is the bus owner, so only the others are refused.
+    if app="$(OTHER_DDC_APPS="$(ddc_rivals)" other_ddc_app)"; then
         if [ $(( $(now) - $(state_get blocked_logged 0) )) -gt 3600 ]; then
             log "BLOCKED: $app is running and also controls the monitor over DDC. Quit it; no writes until then."
             state_set blocked_logged "$(now)"
@@ -88,11 +95,19 @@ ddc_write() {
     fi
     state_set "count_${day}_$key" $(( count + 1 ))
 
+    # User actions skip the interval, but a held key or a fast repeat still gets at most
+    # 4 writes/s per control: wait out the gap (never drop, so the last value lands).
+    if [ "$force" = 1 ]; then
+        local gap_ms=$(( ${USER_MIN_GAP_MS:-250} - ( $(now_ms) - $(state_get "last_tms_$key" 0) ) ))
+        [ $gap_ms -gt 0 ] && sleep "$(awk -v m=$gap_ms 'BEGIN { printf "%.3f", m / 1000 }')"
+    fi
+
     t0="$(now_ms)"
     if backend_write "$vcp" "$value" >/dev/null 2>&1; then ok=ok; else ok=FAIL; fi
     t1="$(now_ms)"
     ms=$(( t1 - t0 ))
     printf '%s %s %s %s %s %s\n' "$(now)" "$vcp" "$value" "$ok" "$ms" "$BACKEND" >> "$LIGHT_HOME/writes.log"
+    state_set "last_tms_$key" "$t1"
 
     if [ "$ok" = ok ]; then
         state_set "last_$key" "$value"
@@ -154,4 +169,14 @@ ddc_gains() {  # <r> <g> <b> [force] [adaptive|neutral]
 ddc_invalidate() {
     rm -f "$STATE/last_brightness" "$STATE/last_red" "$STATE/last_green" "$STATE/last_blue"
     rm -f "$STATE/last_t_gainset" "$STATE/last_t_brightness"
+}
+
+# Delete daily counters from earlier days (they're only ever read for today).
+ddc_prune_counts() {
+    local f d
+    d="$(today)"
+    for f in "$STATE"/count_* "$STATE"/capped_*; do
+        [ -e "$f" ] || continue
+        case "$f" in *"_${d}_"*) ;; *) rm -f "$f" ;; esac
+    done
 }
