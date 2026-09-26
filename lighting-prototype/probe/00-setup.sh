@@ -11,6 +11,16 @@ for t in curl nc python3 git make clang; do
     command -v $t >/dev/null && record $OUT "ok   $t" || record $OUT "MISSING $t"
 done
 
+# With full Xcode installed, `make`/`clang` refuse to run until its licence is accepted,
+# and accepting needs root, which this script doesn't have. Detect it before building.
+if xcode-select -p 2>/dev/null | grep -q '/Xcode.*\.app/'; then
+    if ! xcodebuild -license check >/dev/null 2>&1; then
+        record $OUT "STOP: Xcode's licence hasn't been accepted, so the build tools won't run."
+        record $OUT "      Run:  sudo xcodebuild -license accept   (asks for your Mac password), then rerun this probe."
+        exit 1
+    fi
+fi
+
 say "Building m1ddc"
 src="$TOOLS/m1ddc-src"
 [ -d "$src" ] || git clone -q --depth 1 https://github.com/waydabber/m1ddc "$src"
@@ -37,6 +47,13 @@ if [ -x "$LUNAR" ]; then
         l_remote="$("$LUNAR" --remote lux 2>&1 | tail -n 1)"
         record $OUT "     lunar lux          → $l_auto"
         record $OUT "     lunar --remote lux → $l_remote"
+        # What Lunar is configured to look for (Defaults in the fyi.lunar.Lunar domain).
+        # An empty hostname means "Check for network light sensors periodically" is OFF.
+        h="$(defaults read fyi.lunar.Lunar sensorHostname 2>/dev/null || echo '(default) lunarsensor.local')"
+        pt="$(defaults read fyi.lunar.Lunar sensorPort 2>/dev/null || echo '(default) 80')"
+        px="$(defaults read fyi.lunar.Lunar sensorPathPrefix 2>/dev/null || echo '(default) empty')"
+        record $OUT "     Lunar sensor settings: hostname=[$h] port=[$pt] pathPrefix=[$px]"
+        [ -z "$h" ] && record $OUT "     → hostname is EMPTY: Lunar's 'Check for network light sensors periodically' is off."
         case "$l_remote" in
             *"Can't connect"*|*Unauthorized*|*rror*)
                 record $OUT "     DIAGNOSIS: the CLI can't reach the running app, so plain \`lunar lux\` ran a separate copy of Lunar that isn't connected to the sensor." ;;
