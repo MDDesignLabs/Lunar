@@ -60,6 +60,15 @@ The first run measured flat readings close to the floor on every channel (≈2.6
 - **Not yet verified on the Mac:** `whitepatch` has never been compiled (the cloud container has no `swiftc`). Rerun probe 00 or 05, and it builds automatically.
 - **Discard** the first run's `05-gain-measurements.csv`.
 
+## New from the research docs (2026-09-26)
+
+`SPEC.md`, `BUILD_PLAN.md`, `TEST_PLAN.md` and `RESEARCH_01`–`06` are now in this folder. Two things they change for the hardware work:
+
+- **Q9: report the transport facts first.** Run `system_profiler SPHardwareDataType | grep -E "Model (Name|Identifier)|Chip"`, note which port the AOC is plugged into (HDMI or USB-C/Thunderbolt), and paste `m1ddc display list detailed`. These decide the Swift DDC transport (chip address 0x37 or 0xB7; RESEARCH_02 §1.3).
+- **Q8: the launchd agent may not reach the sensor.** Apple TN3179 says launchd *agents* aren't exempt from Local Network privacy (RESEARCH_04 §2). After `./install.sh`, check `~/.lighting/lightd.log` for live lux within a minute. If none arrive, run `lightd` from Terminal instead and tell the user. Don't try to work around the privacy check.
+
+Also report probe 03 and 04 results (Q1, Q2, Q14). They were run, but the results haven't reached the docs yet.
+
 ## To do, in order
 
 1. `git pull`, then `bash lighting-prototype/probe/00-setup.sh`. Check the licence line (should be INACTIVE) and the helper line (should be built).
@@ -82,4 +91,4 @@ The first run measured flat readings close to the floor on every channel (≈2.6
     - what to watch over the next week
     - a go/no-go on the Swift v1, and on buying Lunar Pro
 
-Tests: `lighting-prototype/test/run_tests.sh` (57 checks, simulators only) runs anywhere.
+Tests: `lighting-prototype/test/run_tests.sh` (63 checks, simulators only) runs anywhere.
