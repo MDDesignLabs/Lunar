@@ -155,6 +155,7 @@ probe_env() {
     export MOCK_DIR; MOCK_DIR="$(mktemp -d)"; export LIGHT_HOME; LIGHT_HOME="$(mktemp -d)"
     mkdir -p "$LIGHT_HOME/tools"
     cp test/mocks/m1ddc "$LIGHT_HOME/tools/m1ddc"; cp test/mocks/m1ddc "$LIGHT_HOME/tools/m1ddc-1x"
+    printf '#!/bin/sh\nexec sleep 3600\n' > "$LIGHT_HOME/tools/whitepatch"; chmod +x "$LIGHT_HOME/tools/whitepatch"
     rm -rf probe/results; mkdir -p probe/results
     # A shifted baseline (as BetterDisplay might leave it) proves probes restore it, not 50.
     printf 'luminance 60 ddc\nred 50 ddc\ngreen 47 ddc\nblue 44 ddc\n' > probe/results/baseline.txt
@@ -169,6 +170,14 @@ for model in "1.0 0 LINEAR-LIGHT 5403K" "2.2 1 GAMMA-ENCODED 4512K"; do
     check "probe 05 reports its 4500K row as ≈$4" "echo \"\$res\" | grep -q '4500K  50/44/36  → measured ≈  $4'"
     check "probe 05 restores the recorded baseline (50/47/44), not 50/50/50" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ] && [ \$(cat \$MOCK_DIR/m1ddc_green) = 47 ]"
 done
+probe_env
+FAKE_BLIND=1 python3 test/fake_screen_sensor.py 18091 1.0 0 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+res="$(yes "" | SENSOR_URL=http://127.0.0.1:18091/events SETTLE=0.2 WINDOW=0.6 bash probe/05-gain-domain.sh 2>&1)"
+kill $SP
+check "probe 05 stops at preflight when the sensor can't see the screen" "echo \"\$res\" | grep -q 'PREFLIGHT FAILED'"
+check "…and it stops before the sweep (no per-channel rows written)" "! grep -q '^red,' probe/results/05-gain-measurements.csv"
+check "…and still restores the baseline gains" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
+check "…and puts brightness back to the baseline (60)" "[ \$(cat \$MOCK_DIR/m1ddc_luminance) = 60 ]"
 probe_env
 res="$(yes "" | bash probe/04-single-write.sh 2>&1)"
 check "probe 04: monitor that accepts single writes → 'takes single writes'" "echo \"\$res\" | grep -q 'RESULT Q1: NO'"

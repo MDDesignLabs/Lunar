@@ -12,6 +12,8 @@ def gain(c):
     try: return float(open(f"{MOCK}/m1ddc_{c}").read())
     except OSError: return 50.0
 def lux():
+    if os.environ.get("FAKE_BLIND") == "1":   # sensor not facing the screen: room light only
+        return 2.6
     tot = 0.6
     for c, r in REF.items():
         g = gain(c); rel = (g / 50) ** GAM

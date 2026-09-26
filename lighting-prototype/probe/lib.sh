@@ -52,7 +52,20 @@ require_betterdisplay_quiet() {
     fi
 }
 
+# lightd (the adaptive loop) also writes brightness and gains. It must not run during a probe.
+lightd_running() { pgrep -f 'bin/lightd' >/dev/null 2>&1; }
+require_lightd_stopped() {
+    if lightd_running; then
+        say "lightd (the adaptive loop) is running."
+        note "It would write its own brightness and gains in the middle of the measurement."
+        note "Stop it:  launchctl bootout gui/\$(id -u)/com.lighting.lightd 2>/dev/null; pkill -f bin/lightd"
+        pause "Stop lightd, then press Enter"
+        lightd_running && { echo "lightd still running; stopping."; exit 1; }
+    fi
+}
+
 require_lunar_quiet() {
+    require_lightd_stopped
     require_betterdisplay_quiet
     if lunar_running; then
         say "Lunar is running."

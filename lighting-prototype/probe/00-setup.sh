@@ -40,6 +40,12 @@ else
     record $OUT "displaystate helper: BUILD FAILED (see results/displaystate-build.log). lightd falls back to its gap heuristic."
 fi
 
+if swiftc -O -o "$TOOLS/whitepatch" "$PROBE_DIR/../helpers/whitepatch.swift" 2>"$RESULTS/whitepatch-build.log"; then
+    record $OUT "whitepatch helper (probe 05's white screen): built"
+else
+    record $OUT "whitepatch helper: BUILD FAILED (see results/whitepatch-build.log). Probe 05 needs it."
+fi
+
 say "Displays seen by m1ddc"
 "$M1" display list | tee -a "$RESULTS/$OUT"
 n="$("$M1" display list 2>/dev/null | grep -c '^\[')"

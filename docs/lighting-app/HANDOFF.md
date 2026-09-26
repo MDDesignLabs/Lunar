@@ -45,6 +45,21 @@ This is the `BRIGHTNESS_CURVE` the local session derived from Lunar's saved sett
    - **Write the curve into `~/.lighting/config.sh` straight from the parsed data. Never retype or copy it from the chat:** the user's pastes of terminal output drop characters. Then check it by machine: every entry is `number:number`, lux values ascend, and the count matches the source.
 3. **The targets are percentages of Lunar's min–max brightness range.** Check `minDDCBrightness` and `maxDDCBrightness` for the AOC in the same export. If they aren't 0 and 100, rescale before use.
 
+## Probe 05: first run failed, and why
+
+The first run measured flat readings close to the floor on every channel (≈2.6 lux). That was a flaw in the probe's design, not a hardware answer.
+
+- **What went wrong:** the probe asked for Safari full screen and *then* an Enter press in Terminal. Switching to Terminal leaves Safari's full-screen Space, so the monitor showed the desktop, not the white page.
+- **What changed:**
+  - `helpers/whitepatch.swift` shows an always-on-top white window that holds whatever app has focus.
+  - A ~40 s preflight (white vs black) stops the probe unless the sensor sees at least 20 lux of difference and 5× the black reading.
+  - The display is kept awake (`caffeinate -d`).
+  - Brightness is raised to 80 during the probe and restored afterwards.
+  - The floor is re-measured before each channel.
+  - Every probe now refuses to run while `lightd` is running.
+- **Not yet verified on the Mac:** `whitepatch` has never been compiled (the cloud container has no `swiftc`). Rerun probe 00 or 05, and it builds automatically.
+- **Discard** the first run's `05-gain-measurements.csv`.
+
 ## To do, in order
 
 1. `git pull`, then `bash lighting-prototype/probe/00-setup.sh`. Check the licence line (should be INACTIVE) and the helper line (should be built).
