@@ -26,8 +26,8 @@ Status: research, 2026-09-26. Every claim is tagged with where it comes from:
 
 - **CIE 1976 lightness** is a cube-root function of relative luminance: `L* = 116·f(Y/Yn) − 16` [code: `colour/colorimetry/lightness.py`, `lightness_CIE1976`, fetched from colour-science/colour@develop]. Perceived lightness is strongly compressive in luminance, so equal perceptual steps need roughly multiplicative luminance steps.
 - **Room illuminance spans decades.** The design range runs from 0 to 1000 lux (Lunar's `LUX_TO_NITS` table stops at 1000 [code: `Lunar/Data/Display.swift:1336`]). A linear-lux curve would crush everything below ~50 lx into a few percent of its x-axis.
-- **Both reference implementations space their control points multiplicatively:**
-  - Lunar's seed lux values are 0, 13, 23, 39, 71, 80, 100, 135, 160, 190, 224, 313, 565, 702, 800, 1000 [code: `Display.swift:1336`].
+- **Both reference implementations lean towards log spacing:**
+  - Lunar's seed lux values are 0, 13, 23, 39, 71, 80, 100, 135, 160, 190, 224, 313, 565, 702, 800, 1000 [code: `Display.swift:1336`]. They're roughly log-spaced at the low end only (0→13→23→39→71); 71→80→100 is not multiplicative. Corrected 2026-09-26: this said "spaced multiplicatively".
   - Android limits how steep the curve can get using the ratio `((lux₂+0.25)/(lux₁+0.25))^1.0` between neighbouring points [code: AOSP `BrightnessMappingStrategy.java`, `permissibleRatio`, `LUX_GRAD_SMOOTHING = 0.25f`, `MAX_GRAD = 1.0f`].
 - **Conclusion** [derived]: interpolate in `log10(lux)`, with a small floor (the prototype uses 0.1 lx). That's what `lighting-prototype/lib/engine.awk` does.
 - UNVERIFIED: a *specific* psychophysical exponent for "preferred screen brightness vs ambient lux". I found no primary source this session (Wikipedia was blocked). No value in this plan depends on one: the curve is empirical and gets tuned by you.
@@ -65,7 +65,7 @@ Status: research, 2026-09-26. Every claim is tagged with where it comes from:
 
 - **Curve:** piecewise-linear in log10(lux). Malformed entries are skipped and points are sorted.
 - **Correction:** `light brighter|dimmer` sets an additive offset (±50 max). It's dropped when filtered log-lux moves more than `OFFSET_RESET_DECADES = 0.5` from where it was set, which is about 0.32×–3.2×.
-- **Contradiction, kept visible:** the prototype's reset window is roughly **5× wider** than Android's 0.4×–1.6× [derived: 10^0.5 ≈ 3.16 vs 1.6 on the upper side]. Neither has been tested against you. The wider window means one nudge persists across larger room changes, for better or worse.
+- **Contradiction, kept visible:** the prototype's reset window (~0.32×–3.2×) is wider than Android's 0.4×–1.6×: about **2× wider on the upper side** (3.16 vs 1.6), and **1.66× wider in log terms** (1.0 decade vs 0.60 decades total) [derived: 10^±0.5; log10(1.6/0.4) = 0.60]. Corrected 2026-09-26: this said "roughly 5× wider", which was wrong. Neither has been tested against you. The wider window means one nudge persists across larger room changes, for better or worse.
 
 ### 3.4 Comparison
 
@@ -82,7 +82,7 @@ Status: research, 2026-09-26. Every claim is tagged with where it comes from:
 
 - **Prototype filter:** EMA in log-lux with τ = 8 s when the room brightens and 45 s when it darkens, then a 0.04-decade dead-band before recomputing [code: `engine.awk` `cmd=filter`; `bin/lightd`].
   - UNVERIFIED: that these constants feel right. They're design guesses. *Settles it:* a week of use plus the probe 02 lux log.
-- **Lunar's output smoothing writes every intermediate DDC value.** `smoothTransition` steps one unit at a time, adapting the step size to keep each write near 90 ms [code: `Display.swift:5875–5950`, `MAX_SMOOTH_STEP_TIME_NS`]. That's the wear risk discussed in RESEARCH_02.
+- **Lunar's output smoothing writes many intermediate DDC values.** `smoothTransition` starts at one unit per write and grows the step (up to 100) when writes are slow, to keep each write near 90 ms. On a fast bus that's one write per unit; on a slow one, fewer, larger steps (corrected 2026-09-26: this said "one unit at a time" without the growth) [code: `Display.swift:5875–5950`, `MAX_SMOOTH_STEP_TIME_NS`]. That's the wear risk discussed in RESEARCH_02.
 - **Prototype output:** jumps directly to the target, at most one adaptive write per 60 s and only when the change is ≥ 2 units [code: `config.example.sh`, `lib/ddc.sh`]. Expect a visible 2–3-unit step occasionally.
 
 ---

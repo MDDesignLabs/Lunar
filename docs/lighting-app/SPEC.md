@@ -18,7 +18,7 @@ Status: draft, 2026-09-26. Evidence tags point to the research files (R01–R06)
   3. Nothing adapts the white point, and colour-critical work needs a guaranteed-neutral state at one click.
 
 **What exists today:**
-- A shell prototype that does all of this, tested against simulators (63 checks), with no hardware calibration yet.
+- A shell prototype that does all of this, tested against simulators (82 checks after the 2026-09-26 review fixes), with no hardware calibration yet.
 - Probe results from your Mac:
   - probe 00: m1ddc builds and sees the CU34G4Z; the display-sleep helper works;
   - probes 03 and 04 ran, but their results haven't reached this document;
@@ -45,13 +45,18 @@ These are explicit and firm:
 - Screen-content colour sync for the bias light (R05).
 - Auto-exiting the colour-critical mode, ever.
 
+**User constraints** (added 2026-09-26; firm):
+- Never decrypt or circumvent Lunar's Pro code.
+- Native DDC only. Never assume BetterDisplay is installed.
+- Probe 06 Part B (power-cord pulls) is skipped.
+
 ---
 
 ## 4. User stories
 
 **US-1: Adaptive brightness**
 As the user, when the room light changes, my screen brightness follows within about a minute and a half, without flicker or hunting.
-- AC1: A room step of ×10 lux brings brightness within 3 units of the curve target within 90 s (NFR-02).
+- AC1: A room step of ×10 lux brings brightness within 3 units of the curve target within 90 s (NFR-02). *Covers brightening only;* darkening needs its own target, see the NFR-02 decision.
 - AC2: With steady light (±10%), there are 0 brightness writes over 10 minutes.
 
 **US-2: Warm white point in the evening**
@@ -82,6 +87,8 @@ As the user, if I open BetterDisplay or Lunar, this app stops writing and tells 
 
 **US-7: Bias light** (deferred, G6)
 As the user, the strip behind the monitor dims with the screen and turns neutral in colour-critical mode.
+- AC1: The strip goes to 6500 K within 5 s of turning the override on (FR-61).
+- AC2: Strip brightness follows screen brightness, rate-limited to ≤ 1 command per 2 s (FR-60).
 
 ---
 
@@ -94,6 +101,7 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
 - **FR-01** Read `sensor-ambient_light` from the ESP32's event stream (`SENSOR_URL`). Reconnect with backoff of 1 s doubling to 30 s. [R01 §1; prototype `bin/lightd`]
 - **FR-02** If no sample arrives for `STALE_SECS` (default 60), hold all outputs, show "sensor offline", and keep reconnecting.
 - **FR-03** Filter in log10 lux with an asymmetric EMA (τ 8 s brightening, 45 s darkening). Recompute targets only when the filtered value moves ≥ 0.04 decades. [R01 §4]
+- **FR-04** Discard negative or non-numeric lux samples. They are never treated as darkness (0 lx). The shell prototype now does this. (Added 2026-09-26.)
 
 ### Brightness
 
@@ -103,14 +111,17 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
 
 ### White point
 
-- **FR-20** Lux → Kelvin: smoothstep between (`KELVIN_DIM_LUX`, `KELVIN_DIM`) and (`KELVIN_BRIGHT_LUX`, `KELVIN_BRIGHT`), quantised to `KELVIN_STEP`, with a floor of 4000 K. [R03 §1]
-- **FR-21** Kelvin → R/G/B by linear interpolation over the measured `GAIN_TABLE`. No channel may exceed its neutral value. [R03 §3]
+- **FR-20** Lux → Kelvin: smoothstep between (`KELVIN_DIM_LUX`, `KELVIN_DIM`) and (`KELVIN_BRIGHT_LUX`, `KELVIN_BRIGHT`), quantised to `KELVIN_STEP`, with a floor of `KELVIN_FLOOR` (default 4000 K). The floor is implemented in the prototype's `engine.awk` and `light kelvin`. [R03 §1]
+- **FR-21** Kelvin → R/G/B by linear interpolation over the measured `GAIN_TABLE`. No channel may exceed its neutral value; the prototype's engine now clamps gains to ≤ neutral (`CRITICAL_GAINS`). [R03 §3]
 - **FR-22** "Warm now" presets apply a temporary Kelvin until the next adaptive recompute.
 
 ### Override
 
 - **FR-30** Turning the override on:
-  - writes `CRITICAL_GAINS` immediately (bypassing minimum intervals, but never the daily caps or no-op skip);
+  - writes `CRITICAL_GAINS` immediately. It bypasses minimum intervals and the adaptive daily cap, using a separate reserved allowance (`OVERRIDE_RESERVE`, default 10 writes per channel per day, counted on top of the adaptive cap). No-op skip still applies;
+  - if a write can't be made (another DDC app running, reserve exhausted, or a transport failure), the command reports failure and the UI shows "override incomplete", never "ON";
+  - *rationale:* the user's non-negotiable override (G3) vs the EEPROM rule (G4). Writes back to neutral are bounded by the writes away from it, so the reserve adds little wear;
+  - corrected 2026-09-26: this said "bypassing minimum intervals, but never the daily caps or no-op skip";
   - optionally freezes brightness at `CRITICAL_BRIGHTNESS`;
   - persists to disk;
   - is restored first on every launch and wake.
@@ -134,6 +145,7 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
 - **FR-50** Mac sleep: stop writing. Mac wake: wait `WAKE_DELAY` (8 s), rediscover the transport, reapply current targets **once**. [R02 §3]
 - **FR-51** Display sleep with the Mac awake: pause writes. Display wake: same as FR-50.
 - **FR-52** Display reconfiguration (connect, disconnect, mode change): rediscover the transport before the next write.
+- **FR-53** Screen lock is **not** a gate in v1: writes are allowed while the screen is locked (the display-sleep rules in FR-51 still apply). Added 2026-09-26 because TEST_PLAN M-03 says "no writes while locked (if gated)"; with this decision, M-03 checks only the correct state after unlock.
 
 ### Bias light (deferred)
 
@@ -154,6 +166,7 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
 - **NFR-02 Adaptive latency:** a ×10 lux step reaches within 3 units of target in ≤ 90 s.
   - [derived: ~15 s firmware average + ~3τ = 24 s EMA + up to a 60 s write interval ≈ 99 s worst case]
   - *Contradiction:* this worst case is slightly over 90 s. Either accept ≤ 100 s, or let the first write after a large change bypass the interval.
+  - *Contradiction (added 2026-09-26): the 99 s covers brightening only.* Darkening uses τ 45 s: ~15 s firmware + 3 × 45 = 135 s EMA + 60 s write interval ≈ **210 s** [derived, same arithmetic]. **Decision needed:** either a separate darkening target (e.g. ≤ 240 s) in NFR-02 and US-1 AC1, or a faster darkening τ (about 5 s would be needed to fit 90 s, which removes the asymmetry).
 - **NFR-03 Resources:** idle CPU < 1% averaged over 10 minutes; memory < 150 MB. These are targets, not measurements (UNVERIFIED).
 - **NFR-04 EEPROM budget:**
   - hard caps as FR-41;
@@ -161,7 +174,7 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
   - worst case assumes every write costs a cycle.
 - **NFR-05 Failure behaviour:**
   - sensor loss holds outputs;
-  - DDC failures are counted, and writes stop for that VCP after 20 faults (Lunar's threshold [R02 §2]);
+  - DDC failures are counted, and writes stop for that VCP after 20 consecutive faults (matches I-D07; Lunar's threshold [R02 §2]);
   - a crash never leaves the monitor warm after the next launch (FR-45).
 - **NFR-06 Responsiveness:** the UI never blocks on DDC or network.
 - **NFR-07 Unattended operation:** after a reboot, the app runs, reads the sensor and writes the monitor without user action. This includes the Local Network permission being in place [R04 §2].
@@ -210,4 +223,4 @@ Each question has the probe or decision that closes it.
 | The AOC can be driven by an open DDC transport (Q9) | The native app is blocked at the transport; only BetterDisplay-class tools work |
 | The TSL2591 method can measure the gain response (Q3, Q10) | White-point calibration needs a colorimeter or stays approximate |
 | One user, one monitor, one room | Scope grows by at least 2× |
-| You accept a slightly visible 2–3-unit brightness step now and then | Smoothing would have to be in-app, not over DDC; that's a design change |
+| You accept a slightly visible 2–3-unit brightness step now and then. **A guess about you, not something you've said** | Smoothing would have to be in-app, not over DDC; that's a design change |

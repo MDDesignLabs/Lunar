@@ -31,7 +31,7 @@ Every phase ends with something you can use, and a decision point.
 | P0-T03 | Rerun probe 05 with the new white window | P0-T01 | Preflight passes; `RESULT Q3` line present; reference drift < 3% per channel. **If the preflight fails twice, stop and decide on a colorimeter** | 1–3 (the sensor setup is fiddly; 3 h if the helper fails to build) | needs research |
 | P0-T04 | Probe 06, Part A only | P0-T01 | KEPT/RESET recorded for sleep, input switch and power | 0.5 | routine |
 | P0-T05 | Write `~/.lighting/config.sh` from the results | T01–T04 | Values set: `M1DDC`, `GAIN_TABLE`, `GAIN_GAMMA`, `CRITICAL_GAINS` and curve, with a comment on where each came from | 1–2 | routine |
-| P0-T06 | Install `lightd` and test Local Network as an agent (Q8) | P0-T05 | Either the log shows lux arriving under launchd for 1 h, **or** Q8 is marked "blocked" with log evidence | 0.5–2 | needs research |
+| P0-T06 | Install `lightd` and test Local Network as an agent (Q8) | P0-T05, P0-T09 | Either the log shows lux arriving under launchd for 1 h, **or** Q8 is marked "blocked" with log evidence | 0.5–2 | needs research |
 | P0-T07 | If T06 is blocked: switch to a workaround | P0-T06 | `lightd` runs unattended after logout and login. Options: a Terminal-launched session, or a launchd *daemon* (R04 §2) | 2–6 (the daemon route has root/DDC unknowns) | genuinely hard |
 | P0-T08 | SwiftBar item plus the override Shortcut with a hotkey | P0-T06/T07 | The override toggles from the menu bar and the hotkey in < 2 s (NFR-01) | 1–2 | routine |
 | P0-T09 | Probe 02, 24 h, **before** T06 (single client) | — | `RESULT Q6` recorded; lux CSV saved | 0.5 hands-on | routine |
@@ -62,10 +62,11 @@ Every phase ends with something you can use, and a decision point.
 | P1-T05 | Nudge buttons run `bin/light brighter/dimmer` | P1-T04 | ±5 applied; offset shown | 1–3 | routine |
 | P1-T06 | Status states and icon per R06 §3 (stale, blocked, asleep, cap) | P1-T03 | Each state is shown when its state file says so; no colour-only cues | 3–8 | routine |
 | P1-T07 | Launch at login (`SMAppService.mainApp`) | P1-T01 | Survives a reboot | 1–3 | needs research |
+| P1-T08 | Stable code-signing identity: a free Apple ID personal team at minimum, not "Sign to Run Locally" (R04 §4, TN3179) | P1-T01 | After one local network call is allowed, the Local Network grant persists across two rebuilds | 0.5–2 | needs research |
 
 **Usable at the end:** a native menu bar UI in place of SwiftBar.
 
-**Phase total:** 14–38 h. **Decision D1:** is Swift workable for you? If P1 went past about 40 h, reconsider continuing.
+**Phase total:** 14.5–40 h (P1-T08 added 2026-09-26; was 14–38). **Decision D1:** is Swift workable for you? If P1 went past about 40 h, reconsider continuing.
 
 ---
 
@@ -74,11 +75,13 @@ Every phase ends with something you can use, and a decision point.
 | ID | Task | Deps | Acceptance criteria | Hours | Difficulty |
 |---|---|---|---|---|---|
 | P2-T01 | Swift package `Engine`, with a test target | P1-T01 | `swift test` runs | 1–3 | routine |
-| P2-T02 | Port the filter (FR-03) | P2-T01 | Parity vectors from `engine.awk cmd=filter` within 1e-4 (TEST_PLAN U-F*) | 2–4 | routine |
-| P2-T03 | Port the curve (FR-10), including skipping malformed points and sorting | P2-T01 | U-B* pass, including the `134` malformed case | 2–4 | routine |
+| P2-T02 | Port the filter (FR-03) | P2-T06 | Parity vectors from `engine.awk cmd=filter` within 1e-4 (TEST_PLAN U-F*) | 2–4 | routine |
+| P2-T03 | Port the curve (FR-10), including skipping malformed points and sorting | P2-T06 | U-B* pass, including the `134` malformed case | 2–4 | routine |
 | P2-T04 | Port Kelvin + gains (FR-20/21) | P2-T01 | U-K*, U-G* pass; doctest vectors U-C01/C02 pass | 3–6 | routine |
 | P2-T05 | Android-style nudge (FR-11), replacing the additive offset | P2-T03 | U-N* pass (reset at 0.4×/1.6×, smoothing stays monotonic) | 4–10 (porting `smoothCurve` and `inferAutoBrightnessAdjustment`) | needs research |
-| P2-T06 | Parity-vector generator script (awk → JSON fixtures) | P2-T02 | Fixtures committed; tests read them | 2–4 | routine |
+| P2-T06 | Parity-vector generator script (awk → JSON fixtures), **done first after T01** | P2-T01 | Fixtures generated from `engine.awk` for filter, curve, Kelvin and gains; committed; a test target can load them | 2–4 | routine |
+
+Corrected 2026-09-26: P2-T06 depended on P2-T02, while T02/T03's parity ACs needed its fixtures: a hidden cycle. T06 now depends only on T01, and T02/T03 depend on T06. The ID is kept so TEST_PLAN references still resolve.
 
 **Usable at the end:** nothing new on screen. P1 is still the working system. **Phase total:** 14–31 h. **D2:** proceed if the parity tests pass.
 
@@ -108,10 +111,17 @@ Every phase ends with something you can use, and a decision point.
 | P4-T05 | Single-writer handover: refuse while lightd/Lunar/BetterDisplay run (FR-40); add the app to the shell's `OTHER_DDC_APPS` | P4-T04 | TEST_PLAN M-11 passes: never two writers | 2–4 | routine |
 | P4-T06 | Override + white point driven by the app; lightd stopped | P4-T05, P3 | US-2, US-3 acceptance criteria met on hardware | 3–8 | needs research |
 | P4-T07 | Neutral on quit and on crash recovery (FR-45) | P4-T04 | Killing the app with `kill -9` leaves neutral gains after the next launch | 1–3 | routine |
+| P4-T08 | Adaptive brightness via `DDCWriter`, using the ported filter and curve (FR-10; FR-12 optional). Moved here from P6-T01 | P4-T06, P2-T02, P2-T03 | Brightness follows lux with lightd stopped; US-1 AC1–AC2 met on hardware | 2–5 | routine |
+| P4-T09 | "Warm now" presets (FR-22): temporary Kelvin until the next adaptive recompute | P4-T06 | Preset applies within 2 s; the next adaptive recompute replaces it | 1–2 | routine |
 
-**Usable at the end:** the app owns the white point and the override. Brightness is still shell or manual.
+**Brightness gap, flagged 2026-09-26.** Once P4-T06 stops lightd (one writer), the shell no longer does brightness either, so adaptive brightness would be lost until Phase 6. Options:
+- (a) Give the shell a `GAINS_ENABLED=0` mode, so lightd keeps brightness while the app owns gains. **Rejected:** two processes then write the same bus, which breaks the single-writer rule (G5, FR-40).
+- (b) **Recommended:** move brightness into the app in Phase 4 (P4-T08), with the curve and filter ported in P2. The Android-style nudge (P2-T05) and native nudge UI stay in Phase 6; until then the shell-style additive offset or no nudge is acceptable.
+- Also note: the override's `CRITICAL_BRIGHTNESS` freeze (FR-30) is already a brightness write from the app in P4-T06, before Phase 6. So "no brightness in the app before Phase 6" was never true as written.
 
-**Phase total:** 22–56 h. **This is where schedules slip.** **D4:** if P4-T02 or T03 fails after about 20 h, stop. Keep the shell for DDC and treat the app as UI only.
+**Usable at the end:** the app owns the white point, the override **and adaptive brightness** (P4-T08). lightd is stopped. Corrected 2026-09-26: this said "Brightness is still shell or manual", which was impossible once lightd stops.
+
+**Phase total:** 25–63 h (was 22–56; P4-T08 and P4-T09 added). **This is where schedules slip.** **D4:** if P4-T02 or T03 fails after about 20 h, stop. Keep the shell for DDC and treat the app as UI only.
 
 ---
 
@@ -121,9 +131,11 @@ Every phase ends with something you can use, and a decision point.
 |---|---|---|---|---|---|
 | P5-T01 | `NSWorkspace` sleep/wake + screens sleep/wake → gate and reapply once (FR-50/51) | P4-T04 | M-01 to M-03 pass | 3–6 | needs research |
 | P5-T02 | `CGDisplayRegisterReconfigurationCallback` → rediscover (FR-52) | P4-T02 | M-04 (unplug/replug) passes | 3–8 (C callback into Swift) | genuinely hard |
-| P5-T03 | Fault counters: stop a VCP after 20 faults (NFR-05) | P4-T04 | I-D07 passes | 1–3 | routine |
+| P5-T03 | Fault counters: stop a VCP after 20 consecutive faults (NFR-05) | P4-T04 | I-D07 passes | 1–3 | routine |
 
-**Phase total:** 7–17 h.
+**Usable at the end:** the app survives sleep, wake and replugging without manual fixes, and stops writing to a VCP that keeps failing.
+
+**Phase total:** 7–17 h. **D5:** continue to Phase 6 if M-01 to M-04 pass across a week of normal use. If wake behaviour is still unreliable after about 17 h, don't retire the shell (skip P6-T03) until it's fixed, so you can fall back to lightd.
 
 ---
 
@@ -131,11 +143,13 @@ Every phase ends with something you can use, and a decision point.
 
 | ID | Task | Deps | Acceptance criteria | Hours | Difficulty |
 |---|---|---|---|---|---|
-| P6-T01 | Adaptive brightness via `DDCWriter` (FR-10/12) | P5, P2-T05 | US-1 acceptance criteria met | 2–5 | routine |
-| P6-T02 | Native nudges (FR-11) + UI | P6-T01 | US-4 acceptance criteria met | 2–4 | routine |
-| P6-T03 | Import `config.sh` (FR-70); `launchctl bootout` of lightd | P6-T01 | Fresh install reproduces the shell's behaviour; one-week soak passes | 2–5 | routine |
+| P6-T01 | *Moved to P4-T08 (2026-09-26).* | — | — | — | — |
+| P6-T02 | Native nudges (FR-11, Android-style) + UI | P4-T08, P2-T05, P5 | US-4 acceptance criteria met | 2–4 | routine |
+| P6-T03 | Import `config.sh` (FR-70); `launchctl bootout` of lightd | P4-T08 | Fresh install reproduces the shell's behaviour; one-week soak passes | 2–5 | routine |
 
-**Phase total:** 6–14 h. **D6:** done. Phases 7–8 are optional.
+**Usable at the end:** the full native app, with the shell retired: brightness, white point, override, nudges, and system events.
+
+**Phase total:** 4–9 h (was 6–14; P6-T01 moved to Phase 4). **D6:** done. Phases 7–8 are optional.
 
 ---
 
@@ -146,12 +160,20 @@ Every phase ends with something you can use, and a decision point.
 | P7-T01 | `Settings` scene: curve table, gain table, limits (R06 §3) | P6 | Edits persist and apply | 6–14 | routine |
 | P7-T02 | Curve chart (Swift Charts) | P7-T01 | Shows the curve and today's lux trace | 4–10 | routine |
 
+**Usable at the end:** curve, gain table and limits editable in the app instead of the config file; a curve chart.
+
+**Phase total:** 10–24 h (no totals row: out of v1 scope). **D7:** build P7-T02 only if a week of data exists and you're still editing the curve.
+
 ## Phase 8 (optional; only after buying a strip): Govee
 
 | ID | Task | Deps | AC | Hours | Difficulty |
 |---|---|---|---|---|---|
 | P8-T01 | Probe 07 on real hardware (Q7) | strip | Kelvin range and protocol confirmed | 0.5–1 | routine |
-| P8-T02 | `NWConnection` UDP sender + manual IP (FR-60/61) | P8-T01 | I-G* pass; the strip tracks brightness | 4–10 | needs research |
+| P8-T02 | `NWConnection` UDP sender + manual IP (FR-60/61) | P8-T01 | I-G* pass; the strip tracks brightness; US-7 AC1–AC2 met | 4–10 | needs research |
+
+**Usable at the end:** a bias light that follows screen brightness and goes to 6500 K in the override.
+
+**Phase total:** 4.5–11 h (no totals row: out of v1 scope). **D8:** if probe 07 shows the protocol doesn't match, stop and use a fixed D65 strip (R05 §3).
 
 ---
 
@@ -160,15 +182,13 @@ Every phase ends with something you can use, and a decision point.
 | Scope | Hours | At 5 h/week | At 10 h/week |
 |---|---|---|---|
 | Phase 0 only | 8–22 + a week of use | 2–5 weeks | 1–3 weeks |
-| Phases 1–6 (native app replacing the shell) | 70–175 | 14–35 weeks | 7–18 weeks |
+| Phases 1–6 (native app replacing the shell) | 72–179 | 14–36 weeks | 7–18 weeks |
 
-**The weekly-hours columns are guesses about you (Q15).** The range is wide because Phase 4 is genuinely uncertain, not padded.
+**The weekly-hours columns are guesses about you (Q15).** The range is wide because Phase 4 is genuinely uncertain, not padded. Totals updated 2026-09-26 (were 70–175 h) for P1-T08, P4-T09 and the brightness move.
 
-**Contradiction with earlier documents:**
-- PLAN.md §1.6 estimated "6–8 weeks part-time" for an MVP. VERDICT.md suggested a 3–4-week white-point v1.
-- This plan's Phases 1–4 alone come to 57–144 h.
-- At about 10 h a week, that's 6–14 weeks. It matches PLAN.md only at its optimistic end, and exceeds VERDICT.md's 3–4 weeks.
-- **The difference is that this plan counts learning time and Phase 4's hardware risk explicitly.**
+**Comparison with earlier documents** (corrected 2026-09-26; the earlier version compared PLAN.md's weeks with this plan's Phases 1–4 at 10 h/week, which mixed up both scope and weekly hours):
+- **PLAN.md §1.6:** "6–8 weeks part-time" for an MVP of brightness + white point + override, assuming 12–15 h/week. That's about **72–120 h**. Because it includes brightness, the like-for-like scope here is **Phases 1–6 (72–179 h)**. PLAN.md's estimate sits inside this range, in its low half. The two agree if things mostly work first time; this plan's high end adds learning time and Phase 4's hardware risk explicitly.
+- **VERDICT.md:** a 3–4-week white-point v1. This plan's Phases 1–4 (white point + override, now also brightness) come to about 60–153 h: 6–15 weeks at 10 h/week. **Contradiction kept:** that exceeds VERDICT.md's 3–4 weeks. Fitting 4 weeks would need at least 15 h/week even at the low end.
 
 ---
 
@@ -177,7 +197,7 @@ Every phase ends with something you can use, and a decision point.
 These are also in SPEC.md, and they're enforced by the phase gates:
 
 - **Nothing native before D0.** The shell week decides whether the app is needed.
-- **No brightness in the app before Phase 6.** One output at a time moves from shell to app.
+- **No brightness in the app before Phase 4.** Corrected 2026-09-26: this said Phase 6, but stopping lightd in P4-T06 would drop adaptive brightness (see the Phase 4 note). Gains and brightness now move to the app together, keeping one writer.
 - **No Settings UI before Phase 7.** Edit the config file.
 - **No Govee before a strip is bought.**
 - **No multi-display support, Intel support, permanent learning, spline curves, smooth DDC transitions, or contrast adaptation, ever.**

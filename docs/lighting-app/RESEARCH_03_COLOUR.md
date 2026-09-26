@@ -60,7 +60,7 @@ The Swift port must pass the same two cases (TEST_PLAN U-C01, U-C02).
 
 | Your row | Linear-light gives | Gamma-encoded gives |
 |---|---|---|
-| "5500K" 50/47/44 | ≈ 6020 K, 95% luminance | ≈ 5530 K, 89% |
+| "5500K" 50/47/44 | ≈ 6020 K, 95% luminance | ≈ 5522 K, 89% (corrected 2026-09-26 from ≈ 5530 K) |
 | "5000K" 50/46/40 | ≈ 5710 K, 93% | ≈ 5000 K, 85% |
 | "4500K" 50/44/36 | **≈ 5400 K, 89%** | **≈ 4510 K, 79%** |
 

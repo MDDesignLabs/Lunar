@@ -35,7 +35,7 @@ Availability below is taken from the fetched docs. Your Mac runs macOS 26.7 (pro
 
 UNVERIFIED: Swift `actor` semantics (the recommended DDC serialiser). It's a Swift 5.5 language feature and I didn't fetch its documentation this session. *Settles it:* the Swift book's "Concurrency" chapter.
 
-UNVERIFIED: the exact `AsyncBytes` property for line-by-line text. The docs mention text properties, but the `…/asyncbytes/lines` page returned 404. *Settles it:* check Xcode autocompletion on `URLSession.AsyncBytes`.
+UNVERIFIED (narrowed 2026-09-26): the exact `AsyncBytes` property for line-by-line text. The `…/asyncbytes/lines` page returned 404, but the `URLSession.AsyncBytes` docs link `AsyncLineSequence` and `AsyncCharacterSequence`, and both pages exist [apple: foundation/urlsession/asyncbytes]. So a line sequence exists; only the property name (`lines` is the likely one) is unchecked. *Settles it:* check Xcode autocompletion on `URLSession.AsyncBytes`.
 
 ---
 
@@ -94,7 +94,8 @@ LightingApp (SwiftUI App, LSUIElement)
 ## 4. Distribution
 
 - Not App Store: private API (Guideline 2.5.1) and the sandbox rule for Mac App Store apps (2.4.5) [src: App Review Guidelines, fetched 2026-09-26].
-- UNVERIFIED: the minimum signing needed for a personally built app on macOS 26 (Xcode "Sign to Run Locally" vs a free Apple ID team), and whether the Local Network permission survives rebuilds under ad-hoc signing. *Settles it:* build twice and check whether System Settings → Privacy & Security → Local Network keeps the grant.
+- **Signing and the Local Network grant** (corrected 2026-09-26: this was UNVERIFIED; TN3179 answers it). [tn3179]: the system tracks programs by their code signature, which is a problem for "ad hoc signed code (Xcode displays this as Sign to Run Locally)"; it advises signing with an Apple-issued code-signing identity.
+  - **Consequence:** pick a real signing identity early, a free Apple ID personal team at minimum, not "Sign to Run Locally". Then check the grant persists: build twice and confirm System Settings → Privacy & Security → Local Network keeps it (BUILD_PLAN P1-T08).
 
 ---
 
@@ -114,6 +115,6 @@ LightingApp (SwiftUI App, LSUIElement)
 | Assumption | If wrong |
 |---|---|
 | macOS 14+ only | If you ever need macOS 13, replace Observation with `ObservableObject`. About a day's work |
-| One process can do DDC and networking under one Local Network grant | If the grant resets per build, every rebuild re-prompts. Irritating, not blocking |
+| One process can do DDC and networking under one Local Network grant | If the grant resets per build, every rebuild re-prompts. Irritating, not blocking. TN3179 says ad-hoc signing causes exactly this; a stable signing identity avoids it (§4) |
 | The shell `lightd` can't reliably reach the sensor as a launchd agent | If it can, the shell phase can run unattended and the case for the app weakens. Test first (SPEC Q8) |
 | DDC works from a non-root GUI app | That's how MonitorControl and m1ddc run; `m1ddc` ran fine as your user in probe 00 |

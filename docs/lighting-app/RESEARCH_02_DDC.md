@@ -13,7 +13,7 @@ Status: research, 2026-09-26. Source tags:
 
 ### 1.1 Private API
 
-Apple Silicon DDC goes through `IOAVService`, which isn't in any public SDK header. Both references declare it by hand [code: MonitorControl `*Bridging-Header.h`; m1ddc `headers/ioregistry.h`, `sources/i2c.m`]:
+Apple Silicon DDC goes through `IOAVService`, which isn't in any public SDK header. Both references declare it by hand [code: MonitorControl `*Bridging-Header.h`; m1ddc `headers/i2c.h:55–56` and `headers/ioregistry.h:49` (as `IOAVServiceRef`). Corrected 2026-09-26: this cited `sources/i2c.m`]:
 
 ```c
 typedef CFTypeRef IOAVService;
@@ -39,6 +39,7 @@ UNVERIFIED: that the private symbols still exist and behave identically on macOS
 - **Lunar also records `isMCDP`** per DCP [code: `DisplayController.swift`, `isMCDP = isMCDP29XX(dcpAvServiceProxy:)`].
 - **MonitorControl's README says:** "DDC control using the built-in HDMI port of … all M1 Macs (MacBook Pro 14" and 16", Mac Mini, Mac Studio) … are not supported" [code: `MonitorControl/README.md:94`].
 - **Contradiction:** PLAN.md §1.4 recommends porting MonitorControl's `Arm64DDC.swift`. **If your AOC is on an M1 Mac Studio's HDMI port, that transport won't work. Port m1ddc's transport selection (0x37 or 0xB7) instead.**
+  - UNVERIFIED (added 2026-09-26): that m1ddc's transport fixes M1 built-in HDMI. The recommendation assumed the M1 HDMI port uses an MCDP29xx converter, and no source I read says so. m1ddc's README only says "supported built-in HDMI ports", and notes that M1 HDMI support is missing from the open-source AppleSiliconDDC. *Settles it:* `m1ddc display list detailed` on the real port, plus a single read of VCP 0x10.
 - UNVERIFIED:
   - which Mac Studio generation you have;
   - whether the AOC is on HDMI or USB-C/Thunderbolt (DisplayPort);
@@ -60,7 +61,7 @@ MonitorControl builds the same packet shape generically: `[0x80|(len+1), len, �
 
 [code: `headers/i2c.h:24–26`; `Arm64DDC.swift`]
 
-**Blocking cost** [derived]: one m1ddc write is at least 2 × 10 ms of sleeps plus I2C time, so 20–50 ms. A read adds a 10–50 ms wait. That's why no transaction may run on the main thread. **Lunar breaks this rule:** `DDC.sync` is `mainThread(action)` [code: `Lunar/DDC/DDC.swift:857`].
+**Blocking cost** [derived]: one m1ddc write is at least 2 × 10 ms of sleeps plus I2C time, so 20–50 ms. A read adds a 10–50 ms wait. A MonitorControl-style read is ≥ 70 ms and up to ~430 ms with retries (10 ms pre-write + 50 ms read wait, 4 retries, 20 ms retry sleep) [code: MonitorControl `Arm64DDC.swift:100–114` defaults]. That's why no transaction may run on the main thread. **Lunar breaks this rule:** `DDC.sync` is `mainThread(action)` [code: `Lunar/DDC/DDC.swift:857`].
 
 UNVERIFIED: that the AOC needs the double send. *Settles it:* probe 04.
 
@@ -73,7 +74,7 @@ UNVERIFIED: that the AOC needs the double send. *Settles it:* probe 04.
 | Latest-value-wins coalescing, skip if unchanged | [code: MonitorControl `Model/OtherDisplay.swift:380–405`] | `writeDDCNextValue[command]` overwritten; write skipped when equal to `writeDDCLastSavedValue` |
 | Serial DDC queue | [code: `OtherDisplay.swift:12` `writeDDCQueue`; `DisplayManager.globalDDCQueue`] | One transaction at a time |
 | Sleep/reconfigure gating | [code: MonitorControl `Support/AppDelegate.swift:144–196`; `OtherDisplay.swift:381`] | Writes refused while `sleepID != 0 \|\| reconfigureID != 0`; driven by `NSWorkspace` sleep/wake notifications |
-| Fault counters → stop writing | [code: `Lunar/DDC/DDC.swift:18–20, 1230–1260`] | `MAX_WRITE_FAULTS = 20`, `MAX_READ_FAULTS = 10`; a write over `MAX_WRITE_DURATION_MS = 2000` counts as severity 4 |
+| Fault counters → stop writing | [code: `Lunar/DDC/DDC.swift:18–20, 1204–1206`] | `MAX_WRITE_FAULTS = 20`, `MAX_READ_FAULTS = 10`; a write over `MAX_WRITE_DURATION_MS = 2000` counts as severity 4 |
 | Wait after wake | [code: `DDC.swift:818–836`] | `waitAfterWakeSeconds`, `delayDDCAfterWake` |
 | Re-apply gains after wake | [code: `Lunar/AppDelegate.swift:1719, 2491–2497`] | Repeats `wakeReapplyTries` times, 2 s apart. That's a wear multiplier |
 
@@ -106,12 +107,14 @@ The prototype already does coalescing (no-op skip), a dead-band, minimum interva
 
 **Budget under the worst case** [derived; conservative defaults in `config.example.sh`]:
 
-| Output | Limit | Writes/day at the cap | Years to 100k at the cap | Realistic writes/day (estimate) |
-|---|---|---|---|---|
-| Brightness | ≥ 60 s apart, Δ ≥ 2, cap 200/day | 200 | 1.4 | 20–60 → 4.5–14 years |
-| Each gain channel | set ≥ 600 s apart, cap 30/day | 30 | 9.1 | 5–15 → 18–55 years |
+| Output | Limit | Writes/day at the cap | Years to 100k at the cap (double send) | Realistic writes/day (estimate) → years (double send) | Single send (m1ddc-1x) |
+|---|---|---|---|---|---|
+| Brightness | ≥ 60 s apart, Δ ≥ 2, cap 200/day | 200 | 0.68 | 20–60 → 2.3–6.8 years | 1.4; 4.6–14 years |
+| Each gain channel | set ≥ 600 s apart, cap 30/day | 30 | 4.6 | 5–15 → 9–27 years | 9.1; 18–55 years |
 
-**Brightness is the binding constraint, not gains.** This contradicts the brief's intuition that "three gain writes per adjustment multiply" wear: gains are written roughly 10× less often per channel.
+Corrected 2026-09-26: the table first assumed one cycle per write. Stock m1ddc sends every command twice (`DDC_ITERATIONS 2`, §1.4), so under "every write commits" each command costs two cycles and all years halve. This holds until probe 04 shows single writes land; then `m1ddc-1x` restores the single-send column. Retries would add more cycles on top.
+
+**Brightness is the binding constraint, not gains.** This contradicts the brief's intuition that "three gain writes per adjustment multiply" wear: gains are written less often per channel, **6.7× less at the caps** (200 vs 30) and **~4× less at the estimated rates** (midpoints 40 vs 10) [derived]. Corrected 2026-09-26: this said "roughly 10× less", which its own table didn't support.
 
 UNVERIFIED: the realistic daily counts. *Settles it:* a week of `writes.log` from the prototype.
 

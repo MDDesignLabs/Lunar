@@ -3,7 +3,7 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **63 checks, all passing**, against simulators. These are:
+- `lighting-prototype/test/run_tests.sh`: **82 checks, all passing**, against simulators (2026-09-26, after the review fixes; 63 before). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 81. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
   - a fake Govee strip on real UDP sockets (`test/fake_govee.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
@@ -14,7 +14,7 @@ Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.m
 
 ## 1. Unit tests (pure functions)
 
-The shell engine is covered by `run_tests.sh` §1–2. The Swift `Engine` must pass the same cases, plus the new ones below. Parity fixtures are generated from `engine.awk` (P2-T06).
+Only some of these have a shell check today (marked "shell §N"). The rest are specified here for the Swift `Engine` and have **no shell check yet**: U-F01, F03, F04, F05, B01, B02, B04, B05, B06, G02, N01–N04. (Corrected 2026-09-26: this said the shell suite covered all of §1.) Parity fixtures are generated from `engine.awk` (P2-T06). Note U-F04: the dt = 0 → 1 s rule lives in `bin/lightd`, not `engine.awk`, so the fixtures must apply it before calling the engine.
 
 ### Filter (FR-03)
 
@@ -35,7 +35,7 @@ The shell engine is covered by `run_tests.sh` §1–2. The Swift `Engine` must p
 | U-B03 | Malformed entry (`134`, `a:b`, empty) | Skipped (shell §1: "malformed … ignored") |
 | U-B04 | Unsorted points | Sorted before interpolation |
 | U-B05 | All entries malformed | Returns the fallback (50) rather than crashing |
-| U-B06 | Your recovered curve at 1, 50, 100, 134, 300 and 800 lux | 29, 43, 45, 47, 68, 100 (computed this session from `engine.awk`) |
+| U-B06 | Your recovered curve (`0:21,13:31,23:34,39:39,71:41,80:44,100:45,135:47,160:49,190:54,224:58,313:69,565:91,702:99,800:100,1000:100`, Lunar's seed) at 1, 50, 100, 134, 300 and 800 lux, compensation off | 26, 40, 45, 47, 68, 100 (recomputed from `engine.awk`). *Corrected 2026-09-26:* the earlier 29/43 came from the corrupted paste with points 13–80 missing |
 
 ### Kelvin and gains (FR-20/21)
 
@@ -43,10 +43,10 @@ The shell engine is covered by `run_tests.sh` §1–2. The Swift `Engine` must p
 |---|---|---|
 | U-K01 | 300 lx → 6500 K; 10 lx → 5000 K | Shell §1 |
 | U-K02 | Quantisation | Kelvin % 250 == 0 |
-| U-K03 | Floor | Never below 4000 K, whatever the config |
+| U-K03 | Floor | Never below `KELVIN_FLOOR` (4000 K), whatever the config (shell §1) |
 | U-G01 | Table interpolation 5250 K | 50/47/42 (shell §1) |
 | U-G02 | K outside the table | Clamps to the end rows |
-| U-G03 | No channel above neutral, for any K | `r ≤ nR, g ≤ nG, b ≤ nB` |
+| U-G03 | No channel above neutral, for any K | `r ≤ nR, g ≤ nG, b ≤ nB`, even if the table has a higher value (shell §1) |
 | U-C01 | `CCT_to_xy_CIE_D(6504.38938305)` | (0.3127077, 0.3291128) ± 1e-6 (colour-science doctest, R03 §1) |
 | U-C02 | McCamy at xy (0.3127, 0.3290) | 6505.08 ± 0.01 (colour-science doctest) |
 
@@ -63,7 +63,8 @@ The shell engine is covered by `run_tests.sh` §1–2. The Swift `Engine` must p
 
 | ID | Case | Expected |
 |---|---|---|
-| U-O01 | Mode critical, any lux | Gains = `CRITICAL_GAINS`, K = 6500 |
+| U-O01 | Mode critical, any lux | Gains = `CRITICAL_GAINS`, K = 6500 (shell §1 checks one lux value only) |
+| U-O02 | Override after the adaptive cap is used up | Neutral still written, from `OVERRIDE_RESERVE`; adaptive stays stopped (shell §2, §8) |
 | U-L01 | Compensation on, 5000 K row | Brightness rises (shell §1: 20 → 23) |
 
 ---
@@ -75,16 +76,20 @@ The shell engine is covered by `run_tests.sh` §1–2. The Swift `Engine` must p
 | ID | Case | Expected |
 |---|---|---|
 | I-D01 | The same value twice | 1 transport call (shell §2) |
-| I-D02 | Δ < dead-band | 0 calls |
+| I-D02 | Δ < dead-band, no interval in play | 0 calls (shell §2) |
 | I-D03 | Second adaptive write inside the interval | Deferred |
 | I-D04 | Forced (user) write inside the interval | Sent |
-| I-D05 | Daily cap | Only `cap` attempts; the cap is logged once (shell §2) |
+| I-D05 | Daily cap, brightness and gains; failed attempts count | Only `cap` attempts; the cap is logged once (shell §2) |
 | I-D06 | Gain set with one channel changed | Only that channel is sent (shell §2) |
 | I-D07 | 20 consecutive transport failures on one VCP | That VCP stops; UI state "fault" |
-| I-D08 | Other DDC app running (a process named Lunar) | 0 calls; "blocked" logged once (shell §8) |
-| I-D09 | Live lightd PID file / stale PID file | Blocked / not blocked (shell §7) |
+| I-D08 | Other DDC app running (the suite uses a fake app name, so a real Lunar on the host doesn't interfere) | 0 calls; "blocked" logged once (shell §8) |
+| I-D09 | Live lightd PID file / stale PID file | Blocked / not blocked. Shell §7 checks the stale case; the live case is checked only for lightd itself (§9, a second copy refuses to start), not for the probes |
 | I-D10 | Concurrent writes from two tasks | Serialised; never interleaved (actor) |
-| I-D11 | Write while the display is asleep | Not sent; after wake, one reapply (shell §8) |
+| I-D11 | Write while the display is asleep | Not sent; after wake, one reapply. Shell §8 checks "not sent" and "writes resume", not "exactly one" |
+| I-D12 | Adaptive gain set deferred by the interval, then lux stops moving | Applied once the interval passes (shell §2, §9) |
+| I-D13 | Lock left by a dead process | Broken at once; a live owner is waited for ≤ 60 s, then the write is skipped (shell §2 checks the dead case) |
+| I-D14 | Override blocked (another DDC app, reserve used up, write failure) | Command exits non-zero with the reason; status and menu show "not neutral", never "ON" (shell §8) |
+| I-D15 | Override turned on while an adaptive set waits for the lock | The adaptive set is dropped (shell §2) |
 
 ### SSE client (P3)
 
@@ -95,6 +100,7 @@ The shell engine is covered by `run_tests.sh` §1–2. The Swift `Engine` must p
 | I-S03 | Server restarts | Recovers without restarting the app |
 | I-S04 | Malformed `data:` lines | Ignored |
 | I-S05 | Bufferless delivery | Each sample arrives within 1 s of being sent (the awk buffering bug found earlier) |
+| I-S06 | Negative or non-numeric samples (Lunar's −1 without Pro) | Discarded, not read as darkness (shell §9) |
 
 ### Govee (P8)
 
@@ -111,9 +117,10 @@ The shell engine is covered by `run_tests.sh` §1–2. The Swift `Engine` must p
 | Probe | Settles | Requirements it validates |
 |---|---|---|
 | 00 setup | Tools, m1ddc build, helper build, display found, licence | Prerequisite for all |
+| Q9 check: `system_profiler SPHardwareDataType`, the port, `m1ddc display list detailed`, one read of VCP 0x10 | Q9 | FR-43 (chip address) |
 | 02 24 h log | Q6, Q12 | FR-01, FR-02, NFR-07 (sensor side) |
-| 03 reads | Q2, Q14 (baseline) | FR-42 verification path, FR-45 |
-| 04 single write | Q1 | FR-41/FR-43 write-cycle count, NFR-04 |
+| 03 reads | Q2, Q14 (baseline) | No FR directly: decides whether the app may ever read back (R02) |
+| 04 single write | Q1 | NFR-04 (double send halves the wear budget) |
 | 05 gain domain | Q3, Q4, Q10 | FR-21 table, FR-12 `GAIN_GAMMA`, US-2 |
 | 06 Part A | Q5 | FR-50/51 (is reapply-after-wake needed?) |
 | 07 Govee | Q7 | FR-60/61 |
@@ -129,7 +136,7 @@ Run it before each phase gate. Record pass/fail and write counts.
 |---|---|---|
 | M-01 | Mac sleep 30 min, then wake | Correct gains and brightness within 15 s; exactly one reapply in the write log |
 | M-02 | Display sleeps while the Mac stays awake (energy settings), then wake | Same as M-01; no writes while asleep |
-| M-03 | Lock screen, then unlock | No writes while locked (if gated) and correct state after |
+| M-03 | Lock screen, then unlock | Correct state after unlock. Writes while locked are allowed (FR-53: not lock-gated in v1) |
 | M-04 | Unplug the monitor cable, then replug | No crash; transport rediscovered; values reapplied once |
 | M-05 | Power the monitor off with its button, then on | Values correct after (depends on Q5) |
 | M-06 | Unplug the ESP32 for 5 min | "Sensor offline" within 60 s; outputs held; recovers within 30 s of replug |
@@ -140,6 +147,8 @@ Run it before each phase gate. Record pass/fail and write counts.
 | M-11 | Open BetterDisplay while the app runs | Writes stop; "Paused: BetterDisplay"; resume after quitting it |
 | M-12 | `kill -9` the app while it's warm | After relaunch, neutral first (FR-45) |
 | M-13 | Sensor facing a lamp (saturation) | Values filtered; no wild jumps (firmware drops 65535) |
+| M-14 | Click the white screen during probe 05 | Probe stops with "ABORTED", restores the monitor, prints no verdict |
+| M-15 | Switch the room from ~300 to ~30 lux and back, timing each | Brightening within 3 units of target in ≤ 90 s; darkening per the NFR-02 decision |
 
 ---
 
@@ -174,30 +183,32 @@ Run it before each phase gate. Record pass/fail and write counts.
 
 | Requirement | Unit | Integration | Hardware / manual |
 |---|---|---|---|
-| FR-01 | — | I-S01, I-S03 | probe 02 |
+| FR-01 | — | I-S01, I-S03, I-S04, I-S05 | probe 02 |
 | FR-02 | — | I-S02 | M-06, M-07 |
-| FR-03 | U-F01–F05 | — | soak |
+| FR-03 | U-F01–F05 | — | soak, M-13 |
+| FR-04 | — | I-S06 | — |
 | FR-10 | U-B01–B06 | — | soak |
 | FR-11 | U-N01–N04 | — | soak |
 | FR-12 | U-L01 | — | probe 05 (`GAIN_GAMMA`) |
 | FR-20 | U-K01–K03 | — | soak |
 | FR-21 | U-G01–G03, U-C01–C02 | — | probe 05 |
-| FR-22 | — | — | manual |
-| FR-30 | U-O01 | — | M-08, M-09 |
-| FR-31 | U-O01 | — | M-08, M-09 |
+| FR-22 | — | — | manual: pick each preset, check gains and that it clears on the next room change (P4-T09) |
+| FR-30 | U-O01, U-O02 | I-D14 | M-08, M-09 |
+| FR-31 | U-O01 | I-D15 | M-08, M-09; code review: no path sets the mode to adaptive except `light critical off` / the UI toggle |
 | FR-40 | — | I-D08, I-D09 | M-11 |
 | FR-41 | — | I-D01–I-D06 | M-10, soak |
-| FR-42 | — | I-D05 | soak |
-| FR-43 | — | — | P4-T02 on hardware (Q9) |
-| FR-44 | — | I-D10 | NFR-06 check |
+| FR-42 | — | I-D05 | soak. *Gap:* blocked and capped attempts reach `lightd.log` (at most once an hour / a day), not `writes.log` |
+| FR-43 | — | — | Q9 check, then P4-T02 on hardware |
+| FR-44 | — | I-D10, I-D13 | NFR-06 check |
 | FR-45 | — | — | M-12 |
-| FR-50 | — | I-D11 | M-01, M-03 |
+| FR-50 | — | I-D11 | M-01, M-05 |
 | FR-51 | — | I-D11 | M-02 |
 | FR-52 | — | — | M-04 |
+| FR-53 | — | — | M-03 |
 | FR-60/61 | — | I-G01–G03 | probe 07 |
 | FR-70/71 | — | — | P6-T03, P1-T07 reboot test |
 | NFR-01 | — | — | M-08 timing, regression 1 |
-| NFR-02 | — | — | a timed lamp-switch test |
+| NFR-02 | — | — | M-15 |
 | NFR-03 | — | — | soak |
 | NFR-04 | — | I-D05 | soak |
 | NFR-05 | — | I-D07 | M-06, M-12 |
@@ -206,7 +217,7 @@ Run it before each phase gate. Record pass/fail and write counts.
 
 ---
 
-## What not to test
+## What not to build (tests)
 
 - **A UI snapshot test suite.** One user; manual QA covers it.
 - **Performance benchmarks** beyond the NFR-03 snapshot.

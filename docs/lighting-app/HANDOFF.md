@@ -69,6 +69,19 @@ The first run measured flat readings close to the floor on every channel (≈2.6
 
 Also report probe 03 and 04 results (Q1, Q2, Q14). They were run, but the results haven't reached the docs yet.
 
+## Review fixes (2026-09-26) that change the hardware steps
+
+Six review agents checked the code, probes, tests and docs. What changed for you:
+
+- **Probe 05:**
+  - A click on the white screen now stops the probe and restores the monitor. Before, the probe carried on and measured the desktop, as in the failed first run.
+  - It also stops after two readings in a row with no sensor data.
+  - The white-screen helper is rebuilt automatically because its source changed. It still hasn't been compiled on a real Mac, so if `swiftc` fails, paste `probe/results/whitepatch-build.log`.
+- **Probe 03** won't overwrite an existing baseline (use `--rebaseline` only if the monitor is really back at its original settings), and it accepts only numbers 0–100.
+- **All probes** now also refuse to run while MonitorControl is running.
+- **`light critical on`** now exits 1 and says why if neutral couldn't be written: another DDC app is running, or today's writes are used up. The override has its own reserve of 10 writes per channel beyond the daily cap (`OVERRIDE_RESERVE`), and the menu bar shows "NOT neutral" when it's incomplete.
+- **Ask the user before probe 05:** does the ESP32 firmware set the TSL2591 to `gain: auto`? The repo's `Lunar/ALS/tsl2591.yaml` does. The reviewer's concern: dim steps may switch the sensor's gain range mid-probe and bias the corrected gain table by a few percent. It wouldn't flip the linear-vs-gamma verdict. Pinning `gain: medium` for the probe means reflashing, so it's the user's call. Don't reflash without asking.
+
 ## To do, in order
 
 1. `git pull`, then `bash lighting-prototype/probe/00-setup.sh`. Check the licence line (should be INACTIVE) and the helper line (should be built).
@@ -91,4 +104,4 @@ Also report probe 03 and 04 results (Q1, Q2, Q14). They were run, but the result
     - what to watch over the next week
     - a go/no-go on the Swift v1, and on buying Lunar Pro
 
-Tests: `lighting-prototype/test/run_tests.sh` (63 checks, simulators only) runs anywhere.
+Tests: `lighting-prototype/test/run_tests.sh` (82 checks, all passing (81 plus one SKIP on a machine with no multicast route), simulators only) runs anywhere, in about 3 minutes. Since 2026-09-26 it writes only to a temp folder: it no longer touches `probe/results/`, so running it after a probe is safe. (Before that fix it deleted that folder. If you ran the tests after a probe with an older checkout, check the results are still there.)
