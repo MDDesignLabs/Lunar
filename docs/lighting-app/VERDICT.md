@@ -7,7 +7,7 @@ Follow-up to [PLAN.md](PLAN.md) §2.8 step 0. The prototype is in [`lighting-pro
 What *was* verified:
 
 1. **Lunar's CLI and Shortcuts, from source.** Every command in the audit is quoted from `Lunar/Data/CLI.swift` and `LunarShortcuts/`.
-2. **The prototype's logic, against simulators.** A fake ESPHome SSE sensor, a fake Govee strip on real UDP sockets (4001/4002/4003, including multicast), mock `m1ddc`/`lunar` binaries, and a simulated AOC + TSL2591 pair that responds to gain writes under either hypothesis. **44/44 checks pass** (`lighting-prototype/test/run_tests.sh`; 82 after later fixes, see TEST_PLAN.md). Testing found and fixed one real bug that would have frozen the loop on your Mac.
+2. **The prototype's logic, against simulators.** A fake ESPHome SSE sensor, a fake Govee strip on real UDP sockets (4001/4002/4003, including multicast), mock `m1ddc`/`lunar` binaries, and a simulated AOC + TSL2591 pair that responds to gain writes under either hypothesis. **44/44 checks pass** (`lighting-prototype/test/run_tests.sh`; 95 after later fixes, see TEST_PLAN.md). Testing found and fixed one real bug that would have frozen the loop on your Mac.
 3. **The probe kit's analysis.** Given synthetic monitors of each type, it correctly classifies them and recovers the right Kelvin for your rows.
 
 The seven hardware answers come from running `lighting-prototype/probe/` on your Mac: about 1 hour hands-on, plus an unattended 24 h log. Each question below says which probe settles it.

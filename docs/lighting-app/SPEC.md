@@ -18,7 +18,7 @@ Status: draft, 2026-09-26. Evidence tags point to the research files (R01–R06)
   3. Nothing adapts the white point, and colour-critical work needs a guaranteed-neutral state at one click.
 
 **What exists today:**
-- A shell prototype that does all of this, tested against simulators (82 checks after the 2026-09-26 review fixes), with no hardware calibration yet.
+- A shell prototype that does all of this, tested against simulators (95 checks after the 2026-09-26 review fixes), with no hardware calibration yet.
 - Probe results from your Mac:
   - probe 00: m1ddc builds and sees the CU34G4Z; the display-sleep helper works;
   - probes 03 and 04 ran, but their results haven't reached this document;
@@ -107,7 +107,8 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
 
 - **FR-10** Map filtered lux to brightness % with piecewise-linear interpolation in log10(lux), over configured points. Skip malformed points; sort by lux; clamp to [min, max]. [R01 §3.3; prototype `engine.awk`]
 - **FR-11** Nudge: ±5 per action, clamped to ±50, applied immediately. It's cleared when lux leaves [anchor × 0.4, anchor × 1.6] (Android's default [R01 §3.2]; configurable). *Contradiction kept:* the prototype currently clears at ~0.32–3.2×.
-- **FR-12** Optional luminance compensation: brightness × 1/Y_rel(gains), using the measured `GAIN_GAMMA`. [R03 §3]
+- **FR-12** Optional luminance compensation: brightness × 1/Y_rel(gains), using the measured `GAIN_GAMMA`, computed from the gains **actually on the monitor**. While a gain set is deferred or capped these differ from the targets. [R03 §3]
+  - Until probe 05 measures it, `GAIN_GAMMA` defaults to 1.0. If the truth is 2.2, this under-compensates (the screen is slightly dim when warm). A guessed 2.2 would over-brighten by ~9% at 5000 K if the truth is 1.0 (derived: Y_rel of 50/46/40 is 0.928 at γ 1.0 vs 0.852 at γ 2.2). Changed 2026-09-26: the prototype defaulted to a guessed 2.2.
 
 ### White point
 
@@ -124,18 +125,20 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
   - corrected 2026-09-26: this said "bypassing minimum intervals, but never the daily caps or no-op skip";
   - optionally freezes brightness at `CRITICAL_BRIGHTNESS`;
   - persists to disk;
-  - is restored first on every launch and wake.
+  - is restored first on every launch and wake, before the first lux sample (the sensor may be offline). The prototype does this since 2026-09-26.
 - **FR-31** No code path turns the override off except an explicit user action.
 
 ### DDC safety
 
-- **FR-40** Refuse every monitor write while Lunar, BetterDisplay or MonitorControl is running, or while the shell `lightd` is live (checked by PID file). [R02 §5]
+- **FR-40** Refuse every monitor write while Lunar, BetterDisplay or MonitorControl is running, or while the shell `lightd` is live (checked by PID file). [R02 §5] (Prototype with `BACKEND=lunar`: Lunar is the intended bus owner there, so only the other two are refused.)
 - **FR-41** Scheduler rules:
   - skip writes equal to the last value;
   - brightness dead-band ≥ 2 units;
   - minimum intervals: brightness 60 s, gain set 600 s;
-  - daily caps: 200 brightness writes, 30 per gain channel, counted on every attempt.
-- **FR-42** Log every attempt: time, VCP, value, result, duration.
+  - daily caps: 200 brightness writes, 30 per gain channel, counted on every attempt;
+  - user actions (nudges, presets, the override) skip the intervals but are spaced ≥ 250 ms per control (≤ 4 writes/s), delayed rather than dropped so the last value lands. Added 2026-09-26: PLAN §2.2 had this throttle and SPEC had dropped it.
+  - *Contradiction flagged 2026-09-26:* PLAN.md §2.2 set brightness ≥ 20 s and caps of 300/50. SPEC's stricter 60 s and 200/30 follow the user's rule of conservative EEPROM limits, and supersede PLAN. They're also the reason NFR-02's darkening case is slow.
+- **FR-42** Log every write sent to the monitor: time, VCP, value, result, duration. Refusals (another DDC app, a cap) never reach the monitor and cost no wear, so they're summarised in the app log (once per episode), not in the write log. Changed 2026-09-26: this said "every attempt"; the review found the shell logs refusals only in `lightd.log`, and logging each retry would flood the write log.
 - **FR-43** Pick the DDC chip address per display: `0x37`, or `0xB7` for MCDP29xx ports. [R02 §1.3]
 - **FR-44** All DDC transactions run serially and never on the main thread. [R02 §1.4]
 - **FR-45** On quit, write neutral gains. If the previous run didn't exit cleanly, write neutral before anything else.
@@ -143,6 +146,8 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
 ### System events
 
 - **FR-50** Mac sleep: stop writing. Mac wake: wait `WAKE_DELAY` (8 s), rediscover the transport, reapply current targets **once**. [R02 §3]
+  - Read back after the reapply only if probe 03 shows reads are trustworthy (Q2). *Contradiction flagged 2026-09-26:* PLAN.md said "reapply plus a read-back" unconditionally.
+  - The shell prototype approximates this. It has no sleep notifications, so it treats a gap of `WAKE_GAP` (90 s) between samples as a possible wake, and checks `sysctl kern.waketime` to tell a real wake from a sensor dropout. The `kern.waketime` output format is UNVERIFIED on your Mac; if it can't be read, every gap is treated as a wake.
 - **FR-51** Display sleep with the Mac awake: pause writes. Display wake: same as FR-50.
 - **FR-52** Display reconfiguration (connect, disconnect, mode change): rediscover the transport before the next write.
 - **FR-53** Screen lock is **not** a gate in v1: writes are allowed while the screen is locked (the display-sleep rules in FR-51 still apply). Added 2026-09-26 because TEST_PLAN M-03 says "no writes while locked (if gated)"; with this decision, M-03 checks only the correct state after unlock.

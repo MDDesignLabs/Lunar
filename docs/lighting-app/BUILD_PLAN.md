@@ -18,6 +18,20 @@ Status: draft, 2026-09-26. The requirements (FR-/NFR-) and open questions (Q-) a
 
 Every phase ends with something you can use, and a decision point.
 
+### Basis for the ranges (added 2026-09-26: the review found most tasks gave no reasoning)
+
+The numbers are judgement, not measurements. This is what each phase's range rests on:
+
+| Phase | What the range is based on |
+|---|---|
+| P0 | Hands-on time per probe, from the probes' own timings (README table), plus config and install work already done once in this project |
+| P1 | First Xcode project and signing for someone new to it (the high end), then small SwiftUI views over files that already exist |
+| P2 | The code to port is small and fully specified: `engine.awk` is 127 lines, with fixtures to test against. The Android nudge (P2-T05) is the unknown |
+| P3 | One async stream client. The format and a fake server already exist (`test/fake_sensor.py`); Local Network behaviour is the risk |
+| P4 | m1ddc's transport is ~350 lines of Objective-C (`ioregistry.m` 266, `i2c.m` 86) calling private IOKit APIs. Porting unfamiliar low-level code, with hardware-only failures, is why the high end is 2–3× the low end |
+| P5 | Three system-notification hooks; the C reconfiguration callback is the unfamiliar part |
+| P6–P8 | Mostly wiring existing pieces together; ranges are small because the hard parts land earlier |
+
 ---
 
 ## Phase 0: Finish and live with the shell system (no Swift)
@@ -30,22 +44,25 @@ Every phase ends with something you can use, and a decision point.
 | P0-T02 | Establish the Mac Studio chip and the AOC port (Q9) | — | Chip, port, and m1ddc's chip address (0x37/0xB7) recorded | 0.25–0.5 | routine |
 | P0-T03 | Rerun probe 05 with the new white window | P0-T01 | Preflight passes; `RESULT Q3` line present; reference drift < 3% per channel. **If the preflight fails twice, stop and decide on a colorimeter** | 1–3 (the sensor setup is fiddly; 3 h if the helper fails to build) | needs research |
 | P0-T04 | Probe 06, Part A only | P0-T01 | KEPT/RESET recorded for sleep, input switch and power | 0.5 | routine |
-| P0-T05 | Write `~/.lighting/config.sh` from the results | T01–T04 | Values set: `M1DDC`, `GAIN_TABLE`, `GAIN_GAMMA`, `CRITICAL_GAINS` and curve, with a comment on where each came from | 1–2 | routine |
+| P0-T05 | Write `~/.lighting/config.sh` from the results | P0-T01, P0-T02, P0-T03, P0-T04 | Values set: `M1DDC`, `GAIN_TABLE`, `GAIN_GAMMA`, `CRITICAL_GAINS` and curve, with a comment on where each came from | 1–2 | routine |
 | P0-T06 | Install `lightd` and test Local Network as an agent (Q8) | P0-T05, P0-T09 | Either the log shows lux arriving under launchd for 1 h, **or** Q8 is marked "blocked" with log evidence | 0.5–2 | needs research |
 | P0-T07 | If T06 is blocked: switch to a workaround | P0-T06 | `lightd` runs unattended after logout and login. Options: a Terminal-launched session, or a launchd *daemon* (R04 §2) | 2–6 (the daemon route has root/DDC unknowns) | genuinely hard |
-| P0-T08 | SwiftBar item plus the override Shortcut with a hotkey | P0-T06/T07 | The override toggles from the menu bar and the hotkey in < 2 s (NFR-01) | 1–2 | routine |
+| P0-T08 | SwiftBar item plus the override Shortcut with a hotkey | P0-T06 (or P0-T07, if T06 is blocked) | The override toggles from the menu bar and the hotkey in < 2 s (NFR-01) | 1–2 | routine |
 | P0-T09 | Probe 02, 24 h, **before** T06 (single client) | — | `RESULT Q6` recorded; lux CSV saved | 0.5 hands-on | routine |
 | P0-T10 | Optional: reflash the ESP32 with `power_save_mode: none` (Q12) | P0-T09 | A second probe 02 run is compared with the first | 1–4 (the ESPHome toolchain is new to you) | needs research |
-| P0-T11 | One-week soak (TEST_PLAN §5) | T05–T08 | The daily soak checklist is filled for 7 days | 0.25/day | routine |
+| P0-T11 | One-week soak (TEST_PLAN §5) | P0-T05, P0-T06, P0-T08 | The daily soak checklist is filled for 7 days | 0.25/day | routine |
 
 **Usable at the end:** adaptive brightness and white point, the override, EEPROM-safe writes, a menu bar item and a hotkey. This is the "~75%" configuration from VERDICT.md.
 
-**Phase total:** about 8–22 h of hands-on time, plus a week of use.
+**Phase total:** about 7–13 h of hands-on time without the conditional P0-T07 and the optional P0-T10; 10–23 h with both. Plus at least two weeks of use (see D0). Corrected 2026-09-26: this said 8–22 h, which counted T07 and T10 in the low end.
 
-**Decision point D0:**
-- Stop here if the week shows fewer than 2 manual fixes a day, no wake glitches, and T06 passed.
+**Contradiction flagged 2026-09-26:** PLAN.md §5 #11 says no hotkeys or Shortcuts for the first month. P0-T08 schedules one now. P0-T08 stands: the brief makes a one-click override non-negotiable, and a Shortcut or the menu bar is the only one-click path the shell has. PLAN.md's rule is superseded for the override only; other shortcuts still wait.
+
+**Decision point D0**, after **at least two weeks** of use. Corrected 2026-09-26: this said one week, which contradicted VERDICT.md (2–4 weeks) and RESEARCH_05 (a Govee decision after two weeks). The one-week soak (P0-T11) is part of it.
+- Stop here if the soak shows fewer than 2 manual fixes a day, no wake glitches, and T06 passed.
 - Continue if T06 needed an awkward workaround, wake behaviour is poor, or you want to learn Swift.
 - **Also decide here:** colorimeter or not (if T03 failed), and whether to buy Govee (R05 §3).
+- **Buying Lunar Pro is not an option here any more**, though VERDICT.md and HANDOFF.md listed it. The recovered curve was Lunar's untouched seed, so there's no learned curve to keep, and the Android-style nudge replaces learning (R01). Reconsider only if the shell's brightness proves worse than Lunar's was, over the two weeks.
 
 ---
 
@@ -55,7 +72,7 @@ Every phase ends with something you can use, and a decision point.
 
 | ID | Task | Deps | Acceptance criteria | Hours | Difficulty |
 |---|---|---|---|---|---|
-| P1-T01 | Xcode project: SwiftUI app, `LSUIElement`, macOS 14 target | D0 | Builds and runs with no Dock icon | 2–6 (first Xcode setup and signing) | needs research |
+| P1-T01 | Xcode project: SwiftUI app, `LSUIElement`, macOS 14 target | D0 (a decision, not a task) | Builds and runs with no Dock icon | 2–6 (first Xcode setup and signing) | needs research |
 | P1-T02 | `MenuBarExtra(.window)` with a placeholder layout (R06 §3) | P1-T01 | Popover opens from the menu bar | 2–5 | routine |
 | P1-T03 | Read `~/.lighting/state/*` every 2–5 s into an `@Observable` model | P1-T02 | Mode, Kelvin, lux and today's counts match `bin/light status` | 3–8 | routine |
 | P1-T04 | Override button runs `bin/light critical toggle` | P1-T03 | The toggle works; the UI reflects the new mode within 5 s | 2–5 (Process/sandbox surprises) | needs research |
@@ -79,6 +96,8 @@ Every phase ends with something you can use, and a decision point.
 | P2-T03 | Port the curve (FR-10), including skipping malformed points and sorting | P2-T06 | U-B* pass, including the `134` malformed case | 2–4 | routine |
 | P2-T04 | Port Kelvin + gains (FR-20/21) | P2-T01 | U-K*, U-G* pass; doctest vectors U-C01/C02 pass | 3–6 | routine |
 | P2-T05 | Android-style nudge (FR-11), replacing the additive offset | P2-T03 | U-N* pass (reset at 0.4×/1.6×, smoothing stays monotonic) | 4–10 (porting `smoothCurve` and `inferAutoBrightnessAdjustment`) | needs research |
+
+Clarified 2026-09-26: "no spline curves" (What not to build) still holds. Android's `smoothCurve` adjusts the neighbours of the user's point by a permissible ratio; it isn't a spline, and it's applied here to the piecewise-linear curve. Android's own base curve is a spline, and that part is not ported.
 | P2-T06 | Parity-vector generator script (awk → JSON fixtures), **done first after T01** | P2-T01 | Fixtures generated from `engine.awk` for filter, curve, Kelvin and gains; committed; a test target can load them | 2–4 | routine |
 
 Corrected 2026-09-26: P2-T06 depended on P2-T02, while T02/T03's parity ACs needed its fixtures: a hidden cycle. T06 now depends only on T01, and T02/T03 depend on T06. The ID is kept so TEST_PLAN references still resolve.
@@ -105,11 +124,11 @@ Corrected 2026-09-26: P2-T06 depended on P2-T02, while T02/T03's parity ACs need
 | ID | Task | Deps | Acceptance criteria | Hours | Difficulty |
 |---|---|---|---|---|---|
 | P4-T01 | Bridging header for the IOAVService declarations (R02 §1.1) | P1-T01 | Compiles; the symbols link | 1–3 | needs research |
-| P4-T02 | IORegistry walk to find the AOC's `DCPAVServiceProxy`, and pick 0x37/0xB7 (FR-43) | P4-T01, **Q9** | Finds exactly one external service; the chip address matches m1ddc's | 6–16 (the IORegistry API is unfamiliar; port from `m1ddc/sources/ioregistry.m`) | genuinely hard |
+| P4-T02 | IORegistry walk to find the AOC's `DCPAVServiceProxy`, and pick 0x37/0xB7 (FR-43) | P4-T01, P0-T02 (answers Q9) | Finds exactly one external service; the chip address matches m1ddc's | 6–16 (the IORegistry API is unfamiliar; port from `m1ddc/sources/ioregistry.m`) | genuinely hard |
 | P4-T03 | Write and read packets with checksum; write-cycle count from Q1 | P4-T02 | `set blue 40` visibly lands; reading it back matches (if Q2 says reads work) | 4–10 | genuinely hard |
 | P4-T04 | `DDCWriter` actor: scheduler rules FR-41, caps, write log FR-42, off-main FR-44 | P4-T03 | Integration tests I-D* pass against a mock transport | 5–12 | needs research |
 | P4-T05 | Single-writer handover: refuse while lightd/Lunar/BetterDisplay run (FR-40); add the app to the shell's `OTHER_DDC_APPS` | P4-T04 | TEST_PLAN M-11 passes: never two writers | 2–4 | routine |
-| P4-T06 | Override + white point driven by the app; lightd stopped | P4-T05, P3 | US-2, US-3 acceptance criteria met on hardware | 3–8 | needs research |
+| P4-T06 | Override + white point driven by the app; lightd stopped | P4-T05, P3-T02, P3-T03 | US-2, US-3 acceptance criteria met on hardware | 3–8 | needs research |
 | P4-T07 | Neutral on quit and on crash recovery (FR-45) | P4-T04 | Killing the app with `kill -9` leaves neutral gains after the next launch | 1–3 | routine |
 | P4-T08 | Adaptive brightness via `DDCWriter`, using the ported filter and curve (FR-10; FR-12 optional). Moved here from P6-T01 | P4-T06, P2-T02, P2-T03 | Brightness follows lux with lightd stopped; US-1 AC1–AC2 met on hardware | 2–5 | routine |
 | P4-T09 | "Warm now" presets (FR-22): temporary Kelvin until the next adaptive recompute | P4-T06 | Preset applies within 2 s; the next adaptive recompute replaces it | 1–2 | routine |
@@ -144,7 +163,7 @@ Corrected 2026-09-26: P2-T06 depended on P2-T02, while T02/T03's parity ACs need
 | ID | Task | Deps | Acceptance criteria | Hours | Difficulty |
 |---|---|---|---|---|---|
 | P6-T01 | *Moved to P4-T08 (2026-09-26).* | — | — | — | — |
-| P6-T02 | Native nudges (FR-11, Android-style) + UI | P4-T08, P2-T05, P5 | US-4 acceptance criteria met | 2–4 | routine |
+| P6-T02 | Native nudges (FR-11, Android-style) + UI | P4-T08, P2-T05, P5-T01, P5-T02 | US-4 acceptance criteria met | 2–4 | routine |
 | P6-T03 | Import `config.sh` (FR-70); `launchctl bootout` of lightd | P4-T08 | Fresh install reproduces the shell's behaviour; one-week soak passes | 2–5 | routine |
 
 **Usable at the end:** the full native app, with the shell retired: brightness, white point, override, nudges, and system events.
@@ -157,7 +176,7 @@ Corrected 2026-09-26: P2-T06 depended on P2-T02, while T02/T03's parity ACs need
 
 | ID | Task | Deps | AC | Hours | Difficulty |
 |---|---|---|---|---|---|
-| P7-T01 | `Settings` scene: curve table, gain table, limits (R06 §3) | P6 | Edits persist and apply | 6–14 | routine |
+| P7-T01 | `Settings` scene: curve table, gain table, limits (R06 §3) | P6-T03 | Edits persist and apply | 6–14 | routine |
 | P7-T02 | Curve chart (Swift Charts) | P7-T01 | Shows the curve and today's lux trace | 4–10 | routine |
 
 **Usable at the end:** curve, gain table and limits editable in the app instead of the config file; a curve chart.
@@ -168,7 +187,7 @@ Corrected 2026-09-26: P2-T06 depended on P2-T02, while T02/T03's parity ACs need
 
 | ID | Task | Deps | AC | Hours | Difficulty |
 |---|---|---|---|---|---|
-| P8-T01 | Probe 07 on real hardware (Q7) | strip | Kelvin range and protocol confirmed | 0.5–1 | routine |
+| P8-T01 | Probe 07 on real hardware (Q7) | — (a strip has been bought) | Kelvin range and protocol confirmed | 0.5–1 | routine |
 | P8-T02 | `NWConnection` UDP sender + manual IP (FR-60/61) | P8-T01 | I-G* pass; the strip tracks brightness; US-7 AC1–AC2 met | 4–10 | needs research |
 
 **Usable at the end:** a bias light that follows screen brightness and goes to 6500 K in the override.
@@ -181,7 +200,7 @@ Corrected 2026-09-26: P2-T06 depended on P2-T02, while T02/T03's parity ACs need
 
 | Scope | Hours | At 5 h/week | At 10 h/week |
 |---|---|---|---|
-| Phase 0 only | 8–22 + a week of use | 2–5 weeks | 1–3 weeks |
+| Phase 0 only | 7–23 + two weeks of use | 2–5 weeks of hands-on time, overlapping the two weeks of use | 1–3 weeks, likewise |
 | Phases 1–6 (native app replacing the shell) | 72–179 | 14–36 weeks | 7–18 weeks |
 
 **The weekly-hours columns are guesses about you (Q15).** The range is wide because Phase 4 is genuinely uncertain, not padded. Totals updated 2026-09-26 (were 70–175 h) for P1-T08, P4-T09 and the brightness move.
@@ -196,7 +215,7 @@ Corrected 2026-09-26: P2-T06 depended on P2-T02, while T02/T03's parity ACs need
 
 These are also in SPEC.md, and they're enforced by the phase gates:
 
-- **Nothing native before D0.** The shell week decides whether the app is needed.
+- **No app code before D0.** The shell weeks decide whether the app is needed. The two small probe helpers (`displaystate`, `whitepatch`) are measurement tools, not app code; they're the only Swift before D0.
 - **No brightness in the app before Phase 4.** Corrected 2026-09-26: this said Phase 6, but stopping lightd in P4-T06 would drop adaptive brightness (see the Phase 4 note). Gains and brightness now move to the app together, keeping one writer.
 - **No Settings UI before Phase 7.** Edit the config file.
 - **No Govee before a strip is bought.**

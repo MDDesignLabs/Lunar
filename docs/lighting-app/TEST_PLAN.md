@@ -3,7 +3,7 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **82 checks, all passing**, against simulators (2026-09-26, after the review fixes; 63 before). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 81. These are:
+- `lighting-prototype/test/run_tests.sh`: **95 checks, all passing**, against simulators (2026-09-26, after two rounds of review fixes; 63 before). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 94. Every check added in those rounds was confirmed by reintroducing the bug it targets in a copy and seeing the suite fail. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
   - a fake Govee strip on real UDP sockets (`test/fake_govee.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
@@ -65,7 +65,10 @@ Only some of these have a shell check today (marked "shell §N"). The rest are s
 |---|---|---|
 | U-O01 | Mode critical, any lux | Gains = `CRITICAL_GAINS`, K = 6500 (shell §1 checks one lux value only) |
 | U-O02 | Override after the adaptive cap is used up | Neutral still written, from `OVERRIDE_RESERVE`; adaptive stays stopped (shell §2, §8) |
-| U-L01 | Compensation on, 5000 K row | Brightness rises (shell §1: 20 → 23) |
+| U-L01 | Compensation on, 5000 K row | Brightness rises (shell §1: 20 → 22 with `GAIN_GAMMA` 1.0, the default until probe 05; 23 with 2.2) |
+| U-L02 | Compensation with the gains actually on the monitor (a deferred set) | No boost for gains not yet written (shell §1, §9) |
+| U-A01 | Probe 05 analysis on synthetic data with 3% noise | Right verdict for exponents 1.0 and 2.2; no false "headroom" (shell §1) |
+| U-B07 | Brightness clamp | Curve values outside [`BRIGHTNESS_MIN`, `BRIGHTNESS_MAX`] are clamped (shell §1) |
 
 ---
 
@@ -83,13 +86,18 @@ Only some of these have a shell check today (marked "shell §N"). The rest are s
 | I-D06 | Gain set with one channel changed | Only that channel is sent (shell §2) |
 | I-D07 | 20 consecutive transport failures on one VCP | That VCP stops; UI state "fault" |
 | I-D08 | Other DDC app running (the suite uses a fake app name, so a real Lunar on the host doesn't interfere) | 0 calls; "blocked" logged once (shell §8) |
-| I-D09 | Live lightd PID file / stale PID file | Blocked / not blocked. Shell §7 checks the stale case; the live case is checked only for lightd itself (§9, a second copy refuses to start), not for the probes |
+| I-D09 | Live lightd PID file / stale PID file | Blocked / not blocked. Shell §7 checks both for the probes (nothing written while a live lightd runs); §9 checks that a second lightd refuses to start |
 | I-D10 | Concurrent writes from two tasks | Serialised; never interleaved (actor) |
 | I-D11 | Write while the display is asleep | Not sent; after wake, one reapply. Shell §8 checks "not sent" and "writes resume", not "exactly one" |
 | I-D12 | Adaptive gain set deferred by the interval, then lux stops moving | Applied once the interval passes (shell §2, §9) |
 | I-D13 | Lock left by a dead process | Broken at once; a live owner is waited for ≤ 60 s, then the write is skipped (shell §2 checks the dead case) |
 | I-D14 | Override blocked (another DDC app, reserve used up, write failure) | Command exits non-zero with the reason; status and menu show "not neutral", never "ON" (shell §8) |
 | I-D15 | Override turned on while an adaptive set waits for the lock | The adaptive set is dropped (shell §2) |
+| I-D16 | User writes in quick succession | Spaced ≥ 250 ms per control; the last value lands (shell §2) |
+| I-D17 | A lock held by a live process | The write waits until it's released (shell §2) |
+| I-D18 | Override on at start, sensor offline | Neutral written before any lux sample (shell §9) |
+| I-D19 | Previous run didn't exit cleanly | Neutral written first (shell §9) |
+| I-D20 | `BACKEND=lunar` | Lunar running is expected; BetterDisplay or MonitorControl alongside it is refused (shell §9) |
 
 ### SSE client (P3)
 
@@ -187,20 +195,20 @@ Run it before each phase gate. Record pass/fail and write counts.
 | FR-02 | — | I-S02 | M-06, M-07 |
 | FR-03 | U-F01–F05 | — | soak, M-13 |
 | FR-04 | — | I-S06 | — |
-| FR-10 | U-B01–B06 | — | soak |
+| FR-10 | U-B01–B07 | — | soak |
 | FR-11 | U-N01–N04 | — | soak |
-| FR-12 | U-L01 | — | probe 05 (`GAIN_GAMMA`) |
+| FR-12 | U-L01, U-L02 | — | probe 05 (`GAIN_GAMMA`) |
 | FR-20 | U-K01–K03 | — | soak |
-| FR-21 | U-G01–G03, U-C01–C02 | — | probe 05 |
+| FR-21 | U-G01–G03, U-C01–C02, U-A01 | — | probe 05 |
 | FR-22 | — | — | manual: pick each preset, check gains and that it clears on the next room change (P4-T09) |
-| FR-30 | U-O01, U-O02 | I-D14 | M-08, M-09 |
+| FR-30 | U-O01, U-O02 | I-D14, I-D18 | M-08, M-09 |
 | FR-31 | U-O01 | I-D15 | M-08, M-09; code review: no path sets the mode to adaptive except `light critical off` / the UI toggle |
-| FR-40 | — | I-D08, I-D09 | M-11 |
-| FR-41 | — | I-D01–I-D06 | M-10, soak |
-| FR-42 | — | I-D05 | soak. *Gap:* blocked and capped attempts reach `lightd.log` (at most once an hour / a day), not `writes.log` |
+| FR-40 | — | I-D08, I-D09, I-D20 | M-11 |
+| FR-41 | — | I-D01–I-D06, I-D12, I-D16 | M-10, soak |
+| FR-42 | — | I-D05 | soak (FR-42 now asks only for writes sent; refusals are summarised in `lightd.log`) |
 | FR-43 | — | — | Q9 check, then P4-T02 on hardware |
-| FR-44 | — | I-D10, I-D13 | NFR-06 check |
-| FR-45 | — | — | M-12 |
+| FR-44 | — | I-D10, I-D13, I-D17 | NFR-06 check |
+| FR-45 | — | I-D19 | M-12 |
 | FR-50 | — | I-D11 | M-01, M-05 |
 | FR-51 | — | I-D11 | M-02 |
 | FR-52 | — | — | M-04 |
@@ -214,6 +222,18 @@ Run it before each phase gate. Record pass/fail and write counts.
 | NFR-05 | — | I-D07 | M-06, M-12 |
 | NFR-06 | — | I-D10 | manual (UI stays responsive during writes) |
 | NFR-07 | — | — | probe 02, install + reboot |
+
+### User stories → requirements → tests (added 2026-09-26: the review found stories weren't traced)
+
+| Story | Requirements | Where it's checked |
+|---|---|---|
+| US-1 Adaptive brightness | FR-01–FR-04, FR-10, FR-12, NFR-02 | M-10, M-15, soak |
+| US-2 Warm white point | FR-20, FR-21, FR-41 | U-K*, U-G*, probe 05, soak |
+| US-3 Override | FR-30, FR-31, FR-45, NFR-01 | U-O*, I-D14, I-D18, M-08, M-09, M-12 |
+| US-4 Nudge | FR-11 | U-N*, soak |
+| US-5 Safe by default | FR-41, FR-42, NFR-04, NFR-05 | I-D01–D07, soak |
+| US-6 No fights | FR-40 | I-D08, I-D09, I-D20, M-11 |
+| US-7 Bias light (deferred) | FR-60, FR-61 | I-G*, probe 07 |
 
 ---
 
