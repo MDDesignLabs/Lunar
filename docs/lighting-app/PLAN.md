@@ -194,6 +194,7 @@ What makes this run over: getting white-point calibration right (budget time wit
 
 ## 1.7 Does this already exist?
 
+- *Correction (2026-09-26): you don't own Lunar Pro. Your licence was an expired demo, and without Pro Lunar disables Sensor Mode (`AdaptiveModeKey.enabled` requires `proactive`). The two bullets below assumed a licence. See VERDICT.md, "Update: no Pro licence".*
 - **#1 Adaptive brightness from your ESP32: yes, solved.** Lunar Pro, which you already own, does it. Building it again is for unification and learning, and those are fine reasons. Know that that's the trade you're making.
 - **Lunar Pro can already do a crude #2.** It has a hardware colour-gain Shortcut (`AdjustHardwareColorsIntent`, which writes 0x16/0x18/0x1A), a "Get Ambient Light (lux)" Shortcut, and a CLI (`lunar lux`, `lunar displays <name> redGain 47`, `lunar ddc`, in `Data/CLI.swift`). A script that polls lux and calls the CLI gives you a zero-Swift adaptive white point *today*, using Lunar's DDC stack. It's a good way to live with the feature for a week before building it.
   *Update: verified against the source in [VERDICT.md](VERDICT.md). Exact commands: `~/.local/bin/lunar lux [--listen]` and `lunar displays external redGain 47`. The CLI needs the Lunar app running, because it forwards to the app on 127.0.0.1:23803. The working prototype is in `lighting-prototype/`.*

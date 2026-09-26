@@ -14,6 +14,30 @@ The seven hardware answers come from running `lighting-prototype/probe/` on your
 
 ---
 
+## Update (2026-09-26): no Pro licence
+
+**The licence was an expired demo.** Without Pro, Lunar disables Sensor Mode (`AdaptiveModeKey.enabled` is `proactive || .manual || .auto`, and `autoMode()` falls back to Manual). That's why `lunar lux` returned `-1.0` throughout.
+
+Everything below that relies on Lunar Pro is therefore **not available to you**:
+
+- **Audit items 1 and 2** (lux and gains through Lunar's CLI). The CLI still runs, but it only has lux when Sensor Mode is active.
+- **Lunar's Shortcuts actions**, which count against a limit (`checkShortcutsLimit`, implemented in encrypted code).
+- **The "85%, Lunar Pro backend" column** in the table below.
+
+**What replaces it:** `BACKEND=m1ddc` with `LUX_SOURCE=direct`, now the default. Lunar is out of the loop, and while Lunar, BetterDisplay or MonitorControl is running the prototype refuses to write, so only one app ever touches the monitor.
+
+Three additions since this document was written close the worst gaps in the no-Lunar column:
+
+- **A display-sleep helper**, so the prototype sees the monitor sleep and wake even while the Mac stays awake.
+- **`light brighter` / `light dimmer` nudges.** Each nudge is dropped automatically once the room light changes about 3×.
+- **Seeding the fixed curve from your two weeks of Lunar training**, if Lunar will print it (`lunar mode sensor --print-mapping`).
+
+My estimate for the no-Pro setup is **about 75%, not 65–70%, if the display-sleep helper works on your Mac.** It hasn't been compiled yet: this container has no Swift compiler, so probe 00 builds it on your Mac. If it fails to build, the no-Pro setup is back to 65–70%.
+
+**Should you buy Pro?** Not yet. Run the no-Pro setup for a week first. If you keep nudging brightness several times a day, or wake behaviour is poor, buy Pro and switch to `BACKEND=lunar`; that's a one-line config change, so nothing is lost by waiting.
+
+---
+
 ## Capability audit
 
 ### 1. Can Lunar Pro's CLI read lux from your sensor? **Yes** (source-verified; probe 01 confirms on hardware)

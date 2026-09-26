@@ -6,12 +6,22 @@
 #   - a persistent daily cap per VCP, counted on every *attempt*
 #   - a write log: $LIGHT_HOME/writes.log  (epoch vcp value result ms backend)
 #
-# Return codes: 0 written, 1 backend failed, 2 skipped (no-op/dead-band/interval), 3 daily cap hit.
+# Return codes: 0 written, 1 backend failed, 2 skipped (no-op/dead-band/interval), 3 daily cap hit,
+#               4 blocked because another DDC app (Lunar, BetterDisplay…) is running.
 
 vcp_name() {
     case "$1" in
         0x10) echo brightness ;; 0x16) echo red ;; 0x18) echo green ;; 0x1A) echo blue ;;
     esac
+}
+
+# Other apps that talk DDC to the monitor. While any of them runs, m1ddc writes are
+# refused (two apps on one I2C bus can interleave packets, and they fight over values).
+OTHER_DDC_APPS="${OTHER_DDC_APPS:-Lunar BetterDisplay MonitorControl}"
+other_ddc_app() {
+    local a
+    for a in $OTHER_DDC_APPS; do pgrep -x "$a" >/dev/null 2>&1 && { echo "$a"; return 0; }; done
+    return 1
 }
 
 backend_write() {
@@ -43,7 +53,7 @@ backend_write() {
 # ddc_write <vcp> <value> <min_interval_s> <deadband> <daily_cap> [force]
 ddc_write() {
     local vcp="$1" value="$2" interval="$3" deadband="$4" cap="$5" force="${6:-0}"
-    local last last_t count t0 t1 ok ms key
+    local last last_t count t0 t1 ok ms key app
     key="$(vcp_name "$vcp")"
     last="$(state_get "last_$key" "")"
     last_t="$(state_get "last_t_$key" 0)"
@@ -52,6 +62,14 @@ ddc_write() {
     if [ "$force" != 1 ]; then
         if [ -n "$last" ] && [ "$(absdiff "$value" "$last")" -lt "$deadband" ]; then return 2; fi
         if [ $(( $(now) - last_t )) -lt "$interval" ]; then return 2; fi
+    fi
+
+    if [ "$BACKEND" = m1ddc ] && app="$(other_ddc_app)"; then
+        if [ $(( $(now) - $(state_get blocked_logged 0) )) -gt 3600 ]; then
+            log "BLOCKED: $app is running and also controls the monitor over DDC. Quit it; no writes until then."
+            state_set blocked_logged "$(now)"
+        fi
+        return 4
     fi
 
     count="$(state_get "count_$(today)_$key" 0)"

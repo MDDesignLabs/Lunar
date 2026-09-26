@@ -33,12 +33,29 @@ grep -q 'DDC_ITERATIONS 1' "$src-1x/headers/i2c.h" || { echo "Couldn't patch DDC
 record $OUT "m1ddc (2 writes): $M1  @ $(cd "$src" && git rev-parse --short HEAD)"
 record $OUT "m1ddc-1x (1 write): $M1X"
 
+# Tiny helper so lightd can tell when the monitor sleeps while the Mac stays awake.
+if swiftc -O -o "$TOOLS/displaystate" "$PROBE_DIR/../helpers/displaystate.swift" 2>"$RESULTS/displaystate-build.log"; then
+    record $OUT "displaystate helper: built → now reports '$("$TOOLS/displaystate")'"
+else
+    record $OUT "displaystate helper: BUILD FAILED (see results/displaystate-build.log). lightd falls back to its gap heuristic."
+fi
+
 say "Displays seen by m1ddc"
 "$M1" display list | tee -a "$RESULTS/$OUT"
 n="$("$M1" display list 2>/dev/null | grep -c '^\[')"
 [ "$n" -gt 1 ] && note "More than one external display: export M1DDC_DISPLAY='display <n>' for the AOC before other probes."
 
 say "Lunar"
+# Licence first: without an active Pro licence, Sensor Mode is disabled and `lunar lux`
+# returns -1 whatever the sensor is doing (AdaptiveModeKey.enabled needs `proactive`).
+pro_active="$(defaults read fyi.lunar.Lunar lunarProActive 2>/dev/null)"
+pro_trial="$(defaults read fyi.lunar.Lunar lunarProOnTrial 2>/dev/null)"
+if [ -n "$pro_active$pro_trial" ]; then
+    if [ "$pro_trial" = 1 ]; then lic="trial (active)"; elif [ "$pro_active" = 1 ]; then lic="active"; else lic="INACTIVE (unlicensed or trial expired)"; fi
+    record $OUT "     Lunar Pro licence: $lic   [lunarProActive=$pro_active lunarProOnTrial=$pro_trial, as last saved by Lunar]"
+    [ "$pro_active" != 1 ] && [ "$pro_trial" != 1 ] && \
+        record $OUT "     → Sensor Mode, and lux via Lunar's CLI, need Pro. Use BACKEND=m1ddc LUX_SOURCE=direct (no Lunar)."
+fi
 if [ -x "$LUNAR" ]; then
     record $OUT "ok   Lunar CLI at $LUNAR"
     if lunar_running; then

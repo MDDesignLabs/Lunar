@@ -179,6 +179,50 @@ res="$(yes "" | MOCK_DROP_SINGLE=1 bash probe/04-single-write.sh 2>&1)"
 check "probe 04: monitor that drops single writes → 'keep double-send'" "echo \"\$res\" | grep -q 'RESULT Q1: YES'"
 rm -rf probe/results
 
+echo "── 8. No-Lunar setup: direct lux, DDC-app guard, nudges, display sleep"
+fresh "LUX_SOURCE=direct KELVIN_MIN_INTERVAL=0 GOVEE_IPS= SENSOR_URL=http://127.0.0.1:18084/events"
+python3 test/fake_sensor.py 18084 0.2 40 40 40 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+bin/lightd & DPID=$!; sleep 3; kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+check "LUX_SOURCE=direct reads the ESP32 stream" "[ \"\$(cat $LIGHT_HOME/state/lux 2>/dev/null)\" = 40.0 ]"
+
+fresh; . lib/common.sh; . lib/ddc.sh
+FAKEAPP="$(mktemp -d)"; cp "$(command -v sleep)" "$FAKEAPP/Lunar"; "$FAKEAPP/Lunar" 30 & LP=$!; PIDS="$PIDS $LP"; sleep 0.3
+ddc_brightness 55 1; rc=$?
+check "while an app named Lunar runs, m1ddc writes are refused (rc 4, nothing sent)" "[ $rc = 4 ] && [ \$(calls 'set luminance') = 0 ]"
+check "the refusal is logged once" "[ \$(grep -c BLOCKED $LIGHT_HOME/lightd.log) = 1 ]"
+kill $LP; wait $LP 2>/dev/null; sleep 0.2
+ddc_brightness 55 1
+check "once Lunar quits, writes go through again" "[ \$(calls 'set luminance 55') = 1 ]"
+
+fresh "GOVEE_IPS="; . lib/common.sh
+state_set filtered 2              # 100 lux
+bin/light offset 0 >/dev/null
+b0="$(cat $LIGHT_HOME/state/last_brightness)"
+bin/light brighter >/dev/null
+b1="$(cat $LIGHT_HOME/state/last_brightness)"
+check "light brighter raises brightness by 5 ($b0 → $b1), written immediately" "[ $b1 = \$(( b0 + 5 )) ]"
+bin/light dimmer 10 >/dev/null
+check "light dimmer 10 → offset -5" "[ \$(cat $LIGHT_HOME/state/bright_offset) = -5 ]"
+. lib/ddc.sh; . lib/govee.sh; . lib/apply.sh
+apply_targets 1.2 1                # room dropped from 100 to ~16 lux (0.8 decades)
+check "the nudge is dropped when the room light changes by more than ~3×" "[ \$(cat $LIGHT_HOME/state/bright_offset) = 0 ]"
+
+fresh "KELVIN_MIN_INTERVAL=0 GOVEE_IPS= WAKE_DELAY=0 SENSOR_URL=http://127.0.0.1:18085/events"
+HELPER="$LIGHT_HOME/tools/displaystate"; mkdir -p "$LIGHT_HOME/tools"
+printf '#!/bin/sh\ncat "%s/display"\n' "$MOCK_DIR" > "$HELPER"; chmod +x "$HELPER"
+echo awake > "$MOCK_DIR/display"
+python3 test/fake_sensor.py 18085 0.2 300 300 300 300 300 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+bin/lightd & DPID=$!; PIDS="$PIDS $DPID"
+sleep 1.5; echo asleep > "$MOCK_DIR/display"; sleep 0.5
+n_sleep_start="$(wc -l < $MOCK_DIR/calls.log)"
+sleep 3
+n_sleep_end="$(wc -l < $MOCK_DIR/calls.log)"
+echo awake > "$MOCK_DIR/display"; sleep 2
+kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+check "no DDC writes while the display sleeps, even as the room dims" "[ $n_sleep_start = $n_sleep_end ]"
+check "display sleep and wake are logged" "grep -q 'display asleep' $LIGHT_HOME/lightd.log && grep -q 'display woke' $LIGHT_HOME/lightd.log"
+check "after wake, values are re-sent (writes resume)" "[ \$(wc -l < $MOCK_DIR/calls.log) -gt $n_sleep_end ]"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ $FAIL = 0 ]

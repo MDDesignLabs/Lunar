@@ -14,6 +14,14 @@ apply_targets() {
     local kelvin=6500 brightness=0 red=50 green=50 blue=50 bias=0
     mode="$(current_mode)"
 
+    # A "brighter/dimmer" nudge is a correction for THIS lighting. When the room moves
+    # more than OFFSET_RESET_DECADES (0.5 = ~3× lux) from where it was set, drop it.
+    if [ "$(state_get bright_offset 0)" != 0 ] && awk -v a="$lf" -v b="$(state_get bright_offset_lf "$lf")" \
+        -v d="${OFFSET_RESET_DECADES:-0.5}" 'BEGIN { x = a - b; if (x < 0) x = -x; exit !(x > d) }'; then
+        log "room light changed a lot since the brightness nudge; clearing offset $(state_get bright_offset 0)"
+        state_set bright_offset 0
+    fi
+
     actual_b=""
     if [ "$BACKEND" = lunar ] && [ "$mode" = adaptive ]; then
         actual_b="$(lunar_brightness)"

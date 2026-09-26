@@ -55,8 +55,8 @@ tail -f ~/.lighting/lightd.log ~/.lighting/writes.log
 
 **Backends** (`BACKEND` in config):
 
-- **`lunar` (default).** Lunar Pro keeps doing adaptive brightness, including its learning curve, and keeps owning the DDC bus. The prototype adds lux → Kelvin → gains, the override and the bias light. Gains are written as Lunar display properties, so with `reapplyColorGain` on (`lunar displays external reapplyColorGain true`), **Lunar's native wake handling re-applies your white point after sleep.** Only one app touches the monitor.
-- **`m1ddc`.** No Lunar. The prototype also does brightness, from a fixed log-lux curve with no learning. Quit Lunar or unmanage the AOC first. Wake detection is a heuristic here: a gap of more than 90 s between lux samples.
+- **`m1ddc` with `LUX_SOURCE=direct` (default).** No Lunar, no licence. Lux comes straight from the ESP32. The prototype does brightness from a log-lux curve, plus `light brighter` / `light dimmer` nudges that clear when the room light changes a lot. It also does the white point and the override. While Lunar, BetterDisplay or MonitorControl is running, every DDC write is refused and logged, so only one app ever touches the monitor. Display sleep/wake is detected by a small helper (`helpers/displaystate.swift`, built by probe 00). Without it, a 90 s gap in lux samples is the only wake signal.
+- **`lunar` (needs an active Lunar Pro licence).** Lunar Pro keeps doing adaptive brightness, including its learning curve, and keeps owning the DDC bus. The prototype adds lux → Kelvin → gains, the override and the bias light. Gains are written as Lunar display properties, so with `reapplyColorGain` on (`lunar displays external reapplyColorGain true`), **Lunar's native wake handling re-applies your white point after sleep.** Only one app touches the monitor.
 
 **Safety limits** (in `lib/ddc.sh`):
 

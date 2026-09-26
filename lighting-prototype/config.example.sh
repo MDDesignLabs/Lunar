@@ -2,27 +2,27 @@
 # Copy to ~/.lighting/config.sh and edit. Plain shell: KEY=value, no spaces around '='.
 
 # ── Backend ────────────────────────────────────────────────────────────────
-# "lunar": Lunar Pro keeps adaptive brightness and owns the DDC bus; this
-#          prototype adds white point, override and bias on top. Recommended
-#          while you still have Lunar Pro installed. One app on the bus, and
-#          Lunar re-applies gains after wake if reapplyColorGain is on.
-# "m1ddc": no Lunar. This prototype does brightness too, writing DDC with m1ddc.
-#          Quit Lunar (or unmanage the AOC in it) first.
-BACKEND=lunar
+# "m1ddc": no Lunar. This prototype does brightness AND white point, writing DDC
+#          with m1ddc. Needs no licence. Lunar, BetterDisplay and MonitorControl must
+#          not be running: while any of them is, every write is refused and logged.
+# "lunar": needs an ACTIVE Lunar Pro licence. Lunar keeps adaptive brightness
+#          (with its learned curve) and owns the DDC bus; this prototype adds white
+#          point and the override on top, writing gains through Lunar's CLI.
+BACKEND=m1ddc
 
-LUNAR=~/.local/bin/lunar          # installed from Lunar → Settings → Install CLI
+LUNAR=~/.local/bin/lunar          # /Applications/Lunar.app/Contents/MacOS/Lunar install-cli
 LUNAR_DISPLAY=external            # Lunar display filter: external | <serial> | <name without spaces>
 
-M1DDC=/usr/local/bin/m1ddc
+M1DDC=~/.lighting/tools/m1ddc     # built by probe 00. m1ddc-1x (single write) if probe 04 allows
 M1DDC_DISPLAY=""                  # e.g. "display 1" if you ever have more than one external display
 
 # ── Lux source ─────────────────────────────────────────────────────────────
-# "lunar": read via `lunar lux --listen` (only Lunar talks to the ESP32).
-# "sse":   connect to the ESP32 directly.
-LUX_SOURCE=lunar
+# "direct": connect to the ESP32 directly (same as "sse"). No Lunar needed.
+# "lunar":  read via `lunar lux --listen`. Needs Lunar Pro: without it this returns -1.
+LUX_SOURCE=direct
 SENSOR_URL=http://lunarsensor.local/events
 SENSOR_ID=sensor-ambient_light
-STALE_SECS=300                    # no sample this long → hold outputs, reconnect. 300 suits `lunar lux --listen` (emits only on change); 60 is enough for sse
+STALE_SECS=60                     # no sample this long → hold outputs, reconnect. Use 300 with LUX_SOURCE=lunar (it only emits on change)
 
 # ── Lux filter (log10 domain) ──────────────────────────────────────────────
 TAU_UP=8                          # seconds, room getting brighter
@@ -35,8 +35,9 @@ BRIGHTNESS_CURVE="0:10,10:20,40:35,100:50,300:70,1000:100"
 BRIGHTNESS_MIN=5
 BRIGHTNESS_MAX=100
 BRIGHTNESS_DEADBAND=2             # DDC units
-BRIGHTNESS_MIN_INTERVAL=20        # seconds between adaptive brightness writes
-BRIGHTNESS_DAILY_CAP=300
+BRIGHTNESS_MIN_INTERVAL=60        # seconds between adaptive brightness writes (conservative)
+BRIGHTNESS_DAILY_CAP=200          # hard fuse: adaptive brightness stops for the day after this
+OFFSET_RESET_DECADES=0.5          # a brighter/dimmer nudge is dropped when lux moves ~3× away
 LUMINANCE_COMPENSATION=1          # raise backlight to offset the dimming from warm gains
 
 # ── White point ────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ KELVIN_BRIGHT_LUX=300
 KELVIN_BRIGHT=6500
 KELVIN_STEP=250
 KELVIN_MIN_INTERVAL=600           # seconds between adaptive gain sets
-GAIN_DAILY_CAP=50                 # per channel
+GAIN_DAILY_CAP=30                 # per channel (conservative)
 GAIN_GAP_MS=100                   # pause between the R, G and B writes in one set
 # Kelvin:R:G:B calibration table. Measured points only. These are YOUR derived
 # values and are UNVERIFIED until probe 05 tells you the AOC's gain domain.

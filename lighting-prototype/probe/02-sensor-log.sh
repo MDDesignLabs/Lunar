@@ -1,5 +1,7 @@
 #!/bin/bash
-# 02: Q6. Can a second SSE client stay connected to the ESP32 alongside Lunar?
+# 02: Q6. Is the ESP32's event stream stable over 24 h? (With LUX_SOURCE=direct, lightd is
+#     its only client, so this is the stability of the one link everything depends on.
+#     With Lunar running it also measures two clients at once.)
 # Also produces the lux dataset (plan step 0b): results/lux-<date>.csv
 #
 #   probe/02-sensor-log.sh [hours]      default 24. Leave it running; Ctrl-C ends early and summarises.
@@ -13,12 +15,14 @@ CSV="$RESULTS/lux-$(date +%Y%m%d-%H%M).csv"
 OUT=02-sensor.txt
 
 say "Logging $SENSOR_URL for ${HOURS} h → $CSV"
-lunar_running && note "Lunar is running: this measures two clients at once (the real question)." \
-             || note "Lunar is NOT running: this only measures one client. Start Lunar for Q6."
+if lunar_running; then note "Lunar is running: measuring two clients at once, and checking \`lunar lux\` each minute."
+else note "Lunar is not running: measuring the single-client link (your direct setup)."; fi
+CHECK_LUNAR=0; lunar_running && [ -x "$LUNAR" ] && CHECK_LUNAR=1
 
-python3 - "$SENSOR_URL" "$HOURS" "$CSV" "$LUNAR" <<'PY' | tee -a "$RESULTS/$OUT"
+python3 - "$SENSOR_URL" "$HOURS" "$CSV" "$LUNAR" "$CHECK_LUNAR" <<'PY' | tee -a "$RESULTS/$OUT"
 import json, subprocess, sys, time, urllib.request
 url, hours, csv, lunar = sys.argv[1], float(sys.argv[2]), sys.argv[3], sys.argv[4]
+check_lunar = sys.argv[5] == "1"
 end = time.time() + hours * 3600
 samples = reconnects = 0
 gaps = []           # gaps > 10 s between ambient samples
@@ -50,7 +54,7 @@ try:
                     last = now
                     samples += 1
                     ll = ""
-                    if now - last_lunar_check > 60:
+                    if check_lunar and now - last_lunar_check > 60:
                         last_lunar_check = now
                         try:
                             ll = subprocess.run([lunar, "lux"], capture_output=True, text=True, timeout=10).stdout.strip()
@@ -68,6 +72,7 @@ except KeyboardInterrupt:
     pass
 print(f"samples={samples} reconnects={reconnects} gaps>10s={len(gaps)} longest_gap={max(gaps) if gaps else 0}s")
 print(f"lunar lux checks={lunar_checks} ok={lunar_ok}")
-verdict = "YES" if reconnects <= 2 and len(gaps) <= 5 and (lunar_checks == 0 or lunar_ok / lunar_checks > 0.95) else "NO/UNSTABLE"
-print(f"RESULT Q6: {verdict} (two clients {'with' if lunar_checks else 'without'} Lunar verified)")
+verdict = "STABLE" if reconnects <= 2 and len(gaps) <= 5 and (lunar_checks == 0 or lunar_ok / lunar_checks > 0.95) else "UNSTABLE"
+print(f"RESULT Q6: {verdict} ({'two clients, Lunar checked' if lunar_checks else 'single client'}). "
+      f"Gaps > 10 s mean the white point holds its last value for that long.")
 PY

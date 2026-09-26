@@ -71,6 +71,8 @@ log "lightd start: backend=$BACKEND lux=$LUX_SOURCE mode=$(current_mode)"
 prev_lf="$(state_get filtered "")"
 acted_lf="$(state_get acted "")"
 acted_mode=""
+disp_was_asleep=0
+[ -x "$DISPLAY_STATE" ] || log "no display-state helper at $DISPLAY_STATE: display sleep while the Mac is awake goes unnoticed (run probe/00-setup.sh)"
 last_t="$(now)"
 backoff=1
 
@@ -97,6 +99,21 @@ while true; do
 
         prev_lf="$(engine_filter "$lux" "$prev_lf" "$dt")"
         state_set lux "$lux"; state_set filtered "$prev_lf"
+
+        # Display sleeping (Mac awake): keep filtering, write nothing. On wake: settle, reapply once.
+        ds="$(display_state)"
+        if [ "$ds" = asleep ]; then
+            [ $disp_was_asleep = 0 ] && log "display asleep: pausing DDC writes"
+            disp_was_asleep=1
+            continue
+        fi
+        if [ $disp_was_asleep = 1 ]; then
+            log "display woke: waiting ${WAKE_DELAY}s, then reapplying once"
+            sleep "$WAKE_DELAY"
+            ddc_invalidate
+            force=1
+            disp_was_asleep=0
+        fi
 
         mode="$(current_mode)"
         moved="$(awk -v a="$prev_lf" -v b="$acted_lf" -v d="$LUX_DEADBAND" \

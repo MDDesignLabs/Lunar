@@ -2,6 +2,9 @@
 # light: one-shot control. This is what Shortcuts, hotkeys and you call.
 #
 #   light critical on|off|toggle   colour-critical override (immediate, never rate-limited)
+#   light brighter [n] | dimmer [n]  nudge brightness ±n (default 5) on top of the curve,
+#                                  kept until the room light changes a lot, or `light offset 0`
+#   light offset <n>               set the nudge directly (0 clears it)
 #   light kelvin <K>               write the gains for K right now (manual / testing)
 #   light neutral                  write calibrated neutral gains once (panic button)
 #   light bias <pct> [K]           drive the Govee strips directly
@@ -49,6 +52,22 @@ case "$1" in
             echo "Colour-critical: OFF (adaptive, $(state_get kelvin '?')K)"
         fi
         ;;
+    brighter|dimmer|offset)
+        cur="$(state_get bright_offset 0)"
+        case "$1" in
+            brighter) new=$(( cur + ${2:-5} )) ;;
+            dimmer)   new=$(( cur - ${2:-5} )) ;;
+            offset)   new="${2:-0}" ;;
+        esac
+        [ "$new" -gt 50 ] && new=50; [ "$new" -lt -50 ] && new=-50
+        state_set bright_offset "$new"
+        state_set bright_offset_lf "$(lf_now)"
+        if [ "$BACKEND" = lunar ]; then
+            echo "With BACKEND=lunar, Lunar owns brightness: use Lunar's own slider instead." >&2; exit 64
+        fi
+        apply_targets "$(lf_now)" 1
+        echo "brightness offset ${new} → $(state_get last_brightness '?')"
+        ;;
     kelvin)
         [ -z "$2" ] && { echo "usage: light kelvin <K>" >&2; exit 64; }
         eval "$(awk -f "$ENGINE" -v cmd=targets -v lf=2 -v mode=adaptive -v actual_b=0 \
@@ -72,6 +91,7 @@ case "$1" in
         echo "mode:      $(current_mode)   backend: $BACKEND   lux source: $LUX_SOURCE"
         echo "lux:       $(state_get lux '?') (filtered log10: $(state_get filtered '?'))"
         echo "target:    $(state_get target '?')"
+        echo "offset:    $(state_get bright_offset 0) (brightness nudge)   display: $(display_state)"
         echo "last sent: brightness=$(state_get last_brightness -) gains=$(state_get last_red -)/$(state_get last_green -)/$(state_get last_blue -)"
         printf 'today:     '
         for k in brightness red green blue; do printf '%s=%s ' "$k" "$(state_get "count_$(today)_$k" 0)"; done
@@ -81,7 +101,7 @@ case "$1" in
         tail -n "${2:-20}" "$LIGHT_HOME/writes.log" 2>/dev/null || echo "no writes yet"
         ;;
     *)
-        sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
         exit 64
         ;;
 esac

@@ -88,7 +88,7 @@ BEGIN {
         } else {
             k = kelvin_for(lf)
             gains_for(k)
-            b = curve_eval(curve, lf)
+            b = curve_eval(curve, lf) + boffset
             if (actual_b != "") {
                 # Lunar owns brightness: report its value, only use it for the bias light.
                 b = actual_b

@@ -13,8 +13,12 @@ if [ -f "${LIGHT_CONFIG:-$LIGHT_HOME/config.sh}" ]; then
 fi
 LUNAR="${LUNAR/#\~/$HOME}"
 M1DDC="${M1DDC/#\~/$HOME}"
+[ "$LUX_SOURCE" = direct ] && LUX_SOURCE=sse     # "direct" = straight from the ESP32
+DISPLAY_STATE="${DISPLAY_STATE:-$LIGHT_HOME/tools/displaystate}"
 
 now() { date +%s; }
+# "asleep" / "awake" / "unknown" (helper not built; see helpers/displaystate.swift).
+display_state() { [ -x "$DISPLAY_STATE" ] && "$DISPLAY_STATE" 2>/dev/null || echo unknown; }
 today() { date +%Y-%m-%d; }
 # Milliseconds, for write timing. perl ships with macOS; fall back to whole seconds.
 now_ms() { perl -MTime::HiRes=time -e 'printf "%d", time * 1000' 2>/dev/null || echo $(( $(date +%s) * 1000 )); }
@@ -63,7 +67,8 @@ engine_targets() {
         -v table="$GAIN_TABLE" -v critical_gains="$CRITICAL_GAINS" \
         -v critical_brightness="$CRITICAL_BRIGHTNESS" \
         -v nits_min="$MONITOR_NITS_MIN" -v nits_max="$MONITOR_NITS_MAX" \
-        -v bias_k="$BIAS_K" -v bias_min="$BIAS_MIN" -v bias_max="$BIAS_MAX"
+        -v bias_k="$BIAS_K" -v bias_min="$BIAS_MIN" -v bias_max="$BIAS_MAX" \
+        -v boffset="$(state_get bright_offset 0)"
 }
 
 engine_filter() {
