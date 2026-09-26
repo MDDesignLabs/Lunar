@@ -14,6 +14,8 @@ case "$1" in
         fi ;;
     displays)
         prop="$3"; val="$4"
-        if [ -n "$val" ]; then echo "$val" > "$MOCK_DIR/lunar_$prop"; else cat "$MOCK_DIR/lunar_$prop" 2>/dev/null || echo 50; fi ;;
+        # Same shape as Lunar's CLI (CLI.swift handleDisplays): name line, then an indented value line.
+        if [ -n "$val" ]; then echo "$val" > "$MOCK_DIR/lunar_$prop"
+        else printf '0: AOC CU34G4Z\n\t%s: %s\n' "$prop" "$(cat "$MOCK_DIR/lunar_$prop" 2>/dev/null || echo 50)"; fi ;;
     mode) echo "$2" > "$MOCK_DIR/lunar_mode" ;;
 esac

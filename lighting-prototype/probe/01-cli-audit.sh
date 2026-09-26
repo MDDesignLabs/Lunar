@@ -8,6 +8,7 @@ OUT=01-cli-audit.txt; : > "$RESULTS/$OUT"
 L="$LUNAR"
 [ -x "$L" ] || { record $OUT "Lunar CLI not installed at $L"; exit 1; }
 lunar_running || { record $OUT "Start the Lunar app first: the CLI forwards commands to it (127.0.0.1:23803)."; exit 1; }
+require_betterdisplay_quiet
 
 say "A1. Lux"
 cli="$("$L" lux 2>&1)"
@@ -26,12 +27,13 @@ fi
 say "A2. Colour gain"
 "$L" displays 2>&1 | head -40 > "$RESULTS/01-lunar-displays.txt"
 note "Display list saved to results/01-lunar-displays.txt"
-for p in redGain greenGain blueGain; do record $OUT "cached $p = $("$L" displays external $p 2>&1)"; done
+for p in redGain greenGain blueGain; do record $OUT "Lunar's stored $p = $(lunar_get $p)"; done
 note "Reading 0x1A straight from the monitor (lunar ddc external 0x1A read):"
 record $OUT "lunar ddc external 0x1A read → $("$L" ddc external 0x1A read 2>&1)"
 
 pause "Open the AOC's OSD colour page so you can watch the Blue value, then press Enter"
-before="$("$L" displays external blueGain 2>&1)"
+before="$(lunar_get blueGain)"
+case "$before" in ''|*[!0-9]*) before=50 ;; esac
 "$L" displays external blueGain 30 >/dev/null 2>&1
 if ask_yn "Did the screen turn visibly yellow and the OSD Blue value change to 30?"; then
     record $OUT "RESULT A2: YES. \`lunar displays external blueGain 30\` writes VCP 0x1A."
@@ -45,6 +47,6 @@ fi
 note "Restored blue to ${before:-50}."
 
 say "A3. Is Lunar set to re-apply gains after wake? (this is what makes the Lunar backend robust)"
-record $OUT "reapplyColorGain = $("$L" displays external reapplyColorGain 2>&1)"
+record $OUT "reapplyColorGain = $(lunar_get reapplyColorGain)"
 note "To turn it on:  $L displays external reapplyColorGain true"
 say "Done → $RESULTS/$OUT"

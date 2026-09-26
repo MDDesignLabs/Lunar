@@ -4,6 +4,10 @@
 #
 #   probe/02-sensor-log.sh [hours]      default 24. Leave it running; Ctrl-C ends early and summarises.
 . "$(dirname "$0")/lib.sh"
+# Keep the Mac from idle-sleeping for the duration (display sleep is fine). Re-exec once under caffeinate.
+if [ -z "$UNDER_CAFFEINATE" ] && command -v caffeinate >/dev/null; then
+    UNDER_CAFFEINATE=1 exec caffeinate -i bash "$0" "$@"
+fi
 HOURS="${1:-24}"
 CSV="$RESULTS/lux-$(date +%Y%m%d-%H%M).csv"
 OUT=02-sensor.txt

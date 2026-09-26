@@ -25,6 +25,12 @@ log() {
     return 0
 }
 
+# Lunar prints a property as two lines:  "0: AOC CU34G4Z" / "<TAB>Blue Gain: 50".
+# Return just the value from the indented line.
+lunar_get() {  # lunar_get <display-filter> <property>
+    "$LUNAR" displays "$1" "$2" 2>/dev/null | awk -F': ' '/^\t/ { print $NF; exit }'
+}
+
 state_get() { cat "$STATE/$1" 2>/dev/null || printf '%s' "$2"; }
 state_set() { printf '%s' "$2" > "$STATE/$1.tmp" && mv "$STATE/$1.tmp" "$STATE/$1"; }
 

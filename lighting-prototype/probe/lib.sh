@@ -37,8 +37,23 @@ need_m1ddc() {
 }
 
 lunar_running() { pgrep -xq Lunar; }
+betterdisplay_running() { pgrep -xq BetterDisplay; }
+
+# Lunar prints a property as "0: <name>" then "<TAB><Property>: <value>". Return the value.
+lunar_get() { "$LUNAR" displays external "$1" 2>/dev/null | awk -F': ' '/^\t/ { print $NF; exit }'; }
+
+# BetterDisplay is also a DDC client. Any probe that touches the monitor needs it closed.
+require_betterdisplay_quiet() {
+    if betterdisplay_running; then
+        say "BetterDisplay is running."
+        note "It's another app on the same DDC bus. Quit it for the probes (menu bar icon → Quit)."
+        pause "Quit BetterDisplay, then press Enter"
+        betterdisplay_running && { echo "BetterDisplay still running; stopping."; exit 1; }
+    fi
+}
 
 require_lunar_quiet() {
+    require_betterdisplay_quiet
     if lunar_running; then
         say "Lunar is running."
         note "This probe writes DDC directly. Two apps on the bus at once can corrupt"

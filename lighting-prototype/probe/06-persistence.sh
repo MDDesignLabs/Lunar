@@ -9,6 +9,9 @@
 #   - lost even at 60 s                    → committed only on OSD exit/soft power-off
 # Either way, writes spaced further apart than the delay each cost one cycle, so the
 # rate limits in lib/ddc.sh stay necessary. This only tells you whether BURSTS are cheap.
+#
+#   probe/06-persistence.sh                   Part A only (default)
+#   probe/06-persistence.sh --with-power-cut  Part A + Part B (pulls the cord 3×; read the risk note first)
 . "$(dirname "$0")/lib.sh"
 need_m1ddc; require_lunar_quiet
 OUT=06-persistence.txt; : > "$RESULTS/$OUT"
@@ -33,6 +36,11 @@ m1 set blue 40 >/dev/null
 pause "Turn the AOC off with its power BUTTON, wait 10 s, turn it on, then press Enter"
 check_blue 40 "soft power off/on"
 
+if [ "$1" != --with-power-cut ]; then
+    m1 set blue 50 >/dev/null
+    record $OUT "Part B (power-cut commit test): SKIPPED. Conservative rate limits assume every write costs an EEPROM cycle."
+    exit 0
+fi
 say "Part B: commit delay (you'll pull the monitor's power cord 3 times)"
 for pair in 1:42 30:44 60:46; do
     delay="${pair%%:*}"; v="${pair##*:}"        # a fresh value each round

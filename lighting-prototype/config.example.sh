@@ -58,8 +58,10 @@ GAIN_GAMMA=2.2
 
 # ── Colour-critical override ───────────────────────────────────────────────
 CRITICAL_GAINS="50:50:50"         # calibrated D65 neutral (R:G:B)
-CRITICAL_BRIGHTNESS=40            # freeze backlight here; empty = leave brightness alone
-RESTORE_LUNAR_MODE=sensor         # Lunar mode to go back to when the override ends
+CRITICAL_BRIGHTNESS=40            # freeze backlight here; empty = leave brightness alone.
+                                  # With BACKEND=lunar the override sets Lunar's per-display
+                                  # "Adaptive brightness paused" first, so this write isn't
+                                  # learned into Lunar's curve; turning the override off resumes it.
 
 # ── Bias light (Govee LAN) ─────────────────────────────────────────────────
 GOVEE_IPS=""                      # space-separated, e.g. "192.168.1.60 192.168.1.61"

@@ -139,10 +139,12 @@ check "lux read via 'lunar lux --listen'" "grep -q 'lunar lux --listen' $MOCK_DI
 check "gains written via Lunar properties (displays external blueGain)" "grep -q 'displays external blueGain' $MOCK_DIR/calls.log"
 check "never writes brightness while Lunar owns it" "! grep -q 'displays external brightness [0-9]' $MOCK_DIR/calls.log"
 bin/light critical on >/dev/null
-check "critical ON with Lunar → 'lunar mode manual' + brightness 40" \
-    "grep -q 'lunar mode manual' $MOCK_DIR/calls.log && grep -q 'displays external brightness 40' $MOCK_DIR/calls.log"
+check "critical ON with Lunar → adaptivePaused true BEFORE brightness 40 (not learned)" \
+    "grep -n 'adaptivePaused true\|brightness 40' $MOCK_DIR/calls.log | head -1 | grep -q adaptivePaused"
+check "Lunar's two-line property output is parsed (brightness 55 → bias uses 55)" \
+    "echo 55 > $MOCK_DIR/lunar_brightness; . lib/common.sh; [ \"\$(LUNAR=$ROOT/test/mocks/lunar lunar_get external brightness)\" = 55 ]"
 bin/light critical off >/dev/null
-check "critical OFF → Lunar back to sensor mode" "grep -q 'lunar mode sensor' $MOCK_DIR/calls.log"
+check "critical OFF → Lunar adaptation resumed" "grep -q 'adaptivePaused false' $MOCK_DIR/calls.log"
 kill -TERM $DPID; wait $DPID 2>/dev/null
 
 echo "── 7. Hardware probes against a simulated AOC + sensor (plumbing, not the real monitor)"

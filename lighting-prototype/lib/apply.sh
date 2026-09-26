@@ -5,7 +5,7 @@ current_mode() { state_get mode adaptive; }
 
 # Lunar's own (cached) brightness for the AOC. No DDC read happens here.
 lunar_brightness() {
-    "$LUNAR" displays "$LUNAR_DISPLAY" brightness 2>/dev/null | awk 'NR == 1 { gsub(/[^0-9.]/, ""); print int($0 + 0.5) }'
+    lunar_get "$LUNAR_DISPLAY" brightness | awk '{ print int($0 + 0.5) }'
 }
 
 # apply_targets <filtered_log10_lux> [force]

@@ -31,7 +31,10 @@ case "$1" in
         if [ "$want" = on ]; then
             state_set mode critical
             if [ "$BACKEND" = lunar ] && [ -n "$CRITICAL_BRIGHTNESS" ]; then
-                "$LUNAR" mode manual >/dev/null 2>&1   # stop Lunar re-adapting brightness
+                # Pause Lunar's adaptation for this display BEFORE touching brightness:
+                # Lunar treats a CLI brightness write as a manual correction and adds it
+                # to its learned curve unless the display is paused (Display.swift:6620).
+                "$LUNAR" displays "$LUNAR_DISPLAY" adaptivePaused true >/dev/null 2>&1
             fi
             apply_targets "$(lf_now)" 1
             log "override ON"
@@ -39,7 +42,7 @@ case "$1" in
         else
             state_set mode adaptive
             if [ "$BACKEND" = lunar ] && [ -n "$CRITICAL_BRIGHTNESS" ]; then
-                "$LUNAR" mode "$RESTORE_LUNAR_MODE" >/dev/null 2>&1
+                "$LUNAR" displays "$LUNAR_DISPLAY" adaptivePaused false >/dev/null 2>&1
             fi
             apply_targets "$(lf_now)" 1
             log "override OFF"
