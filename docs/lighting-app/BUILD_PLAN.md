@@ -18,6 +18,8 @@ Status: draft, 2026-09-26. The requirements (FR-/NFR-) and open questions (Q-) a
 
 Every phase ends with something you can use, and a decision point.
 
+**See also [`TASK_BOARD.md`](TASK_BOARD.md)** (and `tasks.csv` for import). It lists every task by type of work (product, design, frontend, backend, hardware, DevOps, QA), adds the design, QA and decision tasks this plan leaves implicit, and computes the critical path. That path shows the DDC tasks (P4-T01 to T03) need only P1-T01 and Q9, so they can be spiked early to settle the biggest risk first.
+
 ### Basis for the ranges (added 2026-09-26: the review found most tasks gave no reasoning)
 
 The numbers are judgement, not measurements. This is what each phase's range rests on:
