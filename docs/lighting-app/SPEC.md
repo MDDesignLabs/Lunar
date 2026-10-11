@@ -206,6 +206,7 @@ Each question has the probe or decision that closes it.
 | Q12 | Does `power_save_mode: none` fix the Wi-Fi loss? | probe 02 before and after reflashing | Open |
 | Q13 | How bright should the bias light be? | decision: calibrate by eye (R05 §2) | Decided, pending hardware |
 | Q14 | Current OSD brightness and baseline | probe 03's `baseline.txt` | Mentioned as "30%" in passing; UNVERIFIED |
+| Q16 | Is the research-based brightness curve right for you (RESEARCH_07), and is the ~55 cd/m² backlight floor dim enough at night? | the soak (nudge counts, notes at night) | Open. Curve recommended 2026-10-11 |
 | Q15 | How many hours a week can you spend? | you | **Unknown. It changes every estimate in BUILD_PLAN** |
 
 ---

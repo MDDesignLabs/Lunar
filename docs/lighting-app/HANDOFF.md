@@ -87,6 +87,19 @@ From `bin/light writes`, `lightd.log` and `pgrep` that the user pasted:
 - **Running under launchd (Q8): works.** After `./install.sh`, the agent (pid matching `launchctl print`) received live lux that changed when the sensor was covered. That's against TN3179's expectation for agents; the reason is UNVERIFIED. **Confirmed after a reboot** with nothing started by hand: current lux, and `last sent` matching the target.
 - **Restart cost:** each stop writes neutral and each start writes the warm gains back, so 2 writes per changing channel per restart. A day of testing with ~7 restarts used 14 of 30 on green and blue. On a normal day (at most one restart) that's ~2, well inside the budget.
 
+## Brightness curve (2026-10-11)
+
+The user found the screen too bright in a dark room. RESEARCH_07 has the sources and the check:
+- the current seed curve gives ~140–160 cd/m² in the dark, against a 20–36 research optimum;
+- this monitor's backlight floor is ~55 cd/m² (KitGuru, colorimeter-measured).
+
+Recommended config:
+- `BRIGHTNESS_CURVE="0:0,10:0,50:1,100:7,200:17,300:22,500:31,1000:76,2000:100"`
+- `BRIGHTNESS_MIN=0`
+- `LUMINANCE_COMPENSATION=0`
+
+Ask the user to move the sensor to the top bezel, facing them. Then check self-illumination at night: compare the lux with a black screen and with a white screen.
+
 ## Review fixes (2026-09-26) that change the hardware steps
 
 Six review agents checked the code, probes, tests and docs. Every finding and its verdict is in `REVIEW_2026-09-26.md`. What changed for you:
