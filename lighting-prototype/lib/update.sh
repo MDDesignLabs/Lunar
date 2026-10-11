@@ -106,9 +106,9 @@ up_after_pull() {
     elif [ -f "$HOME/Library/LaunchAgents/com.lighting.lightd.plist" ]; then
         up_say "lightd: reloading the launchd agent (install.sh)..."
         local out rc
-    out="$(bash "$proto/install.sh" 2>&1)"; rc=$?
-    printf '%s\n' "$out" | sed 's/^/  /'
-    if [ $rc = 0 ]; then reloaded=yes; else up_say "  install.sh failed (exit $rc): run $proto/install.sh yourself and read its error."; fi
+        out="$(bash "$proto/install.sh" 2>&1)"; rc=$?
+        printf '%s\n' "$out" | sed 's/^/  /'
+        if [ $rc = 0 ]; then reloaded=yes; else up_say "  install.sh failed (exit $rc): run $proto/install.sh yourself and read its error."; fi
         up_say "lightd: reloaded=$reloaded"
     else
         pid="$(cat "$home/state/lightd.pid" 2>/dev/null)"
