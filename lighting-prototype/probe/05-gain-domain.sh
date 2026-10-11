@@ -88,7 +88,8 @@ kill "$PATCH_PID" 2>/dev/null; PATCH_PID=""
 
 say "Analysis"
 cfg="${LIGHT_CONFIG:-$HOME/.lighting/config.sh}"
-table="$( [ -f "$cfg" ] && . "$cfg"; echo "${GAIN_TABLE:-6500:50:50:50,5500:50:47:44,5000:50:46:40,4500:50:44:36}")"
+# Defaults first, then the overrides, as lightd reads them.
+table="$( . "$PROBE_DIR/../config.example.sh"; [ -f "$cfg" ] && . "$cfg"; echo "$GAIN_TABLE")"
 python3 "$PROBE_DIR/analyze_gain.py" "$CSV" --table "$table" | tee -a "$RESULTS/$OUT"
 note "Raw data: $CSV. Primaries assumed sRGB; the AOC is wider-gamut, so absolute Kelvin"
 note "is approximate. The linear-vs-encoded verdict does not depend on primaries."

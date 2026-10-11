@@ -32,9 +32,12 @@ GAIN_GAP_MS=0
 GOVEE_IPS=127.0.0.1
 BIAS_REFRESH=3600
 OTHER_DDC_APPS=FakeDDCApp
+GAIN_TABLE="6500:50:50:50,5500:50:47:44,5000:50:46:40,4500:50:44:36"
 $1
 EOF
 }
+# GAIN_TABLE above: the original example table, which §1–§9 were written against (50/46/40 at
+# 5000K, 50/44/36 at 4500K). The measured default (probe 05) is checked in §10.
 calls() { local c; c="$(grep -c "$1" "$MOCK_DIR/calls.log" 2>/dev/null)"; echo "${c:-0}"; }
 eng() { awk -f lib/engine.awk "$@"; }
 
@@ -466,6 +469,111 @@ check "with BACKEND=lunar, Lunar running is expected (not a rival): the write go
 cp "$(command -v sleep)" "$FAKEAPP2/FakeDDCApp"; "$FAKEAPP2/FakeDDCApp" 30 & LP2=$!; PIDS="$PIDS $LP2"; sleep 0.3
 ddc_brightness 56 1; rc=$?
 check "…but another DDC app alongside Lunar is refused (rc 4)" "[ $rc = 4 ]"
+
+echo "── 10. Config migration, lightd's stale-config warning, bin/light update (temp dirs and repos only)"
+SEED="0:21,13:31,23:34,39:39,71:41,80:44,100:45,135:47,160:49,190:54,224:58,313:69,565:91,702:99,800:100,1000:100"
+SEED_BAD="0:21,134,100:45,135:47,160:49,190:54,224:58,313:69,565:91,702:99,800:100,1000:100"   # the corrupted paste
+OLD_TABLE="6500:50:50:50,5500:50:47:44,5000:50:46:40,4500:50:44:36"
+NEW_TABLE="6500:50:50:50,6000:50:48:47,5500:50:46:43,5000:50:43:35,4500:50:40:27,4000:50:37:21"
+RESEARCH_CURVE="0:0,10:0,50:1,100:7,200:17,300:22,500:31,1000:76,2000:100"
+export LIGHT_HOME; LIGHT_HOME="$(mktemp -d)"; export LIGHT_CONFIG="$LIGHT_HOME/config.sh"
+cat > "$LIGHT_CONFIG" <<EOF
+# Lighting prototype configuration.
+# my own note: keep this comment
+BACKEND=m1ddc
+M1DDC_DISPLAY=""                  # e.g. "display 1"
+LUNAR=$HOME/.local/bin/lunar
+LUX_SOURCE=direct
+STALE_SECS=60
+BRIGHTNESS_CURVE="$SEED_BAD"
+BRIGHTNESS_MIN=5
+BRIGHTNESS_MAX=90
+LUMINANCE_COMPENSATION=1
+GAIN_TABLE="$OLD_TABLE"
+GAIN_GAMMA=2.2
+MONITOR_NITS_MAX=350
+FOO=\$(echo hi)
+EOF
+mig1="$(bash lib/config_migrate.sh 2>&1)"
+check "migration removes the seed curve (with the corrupt 134 entry), GAIN_GAMMA=2.2, the old GAIN_TABLE and old defaults" \
+    "! grep -qE '^(BRIGHTNESS_CURVE|GAIN_GAMMA|GAIN_TABLE|BRIGHTNESS_MIN|LUMINANCE_COMPENSATION|MONITOR_NITS_MAX)=' $LIGHT_CONFIG" "$mig1"
+check "…and values equal to the current defaults (BACKEND, LUX_SOURCE, STALE_SECS, LUNAR as \$HOME/…, empty M1DDC_DISPLAY)" \
+    "! grep -qE '^(BACKEND|LUX_SOURCE|STALE_SECS|LUNAR|M1DDC_DISPLAY)=' $LIGHT_CONFIG"
+check "…keeps a custom value (BRIGHTNESS_MAX=90), the comments, and adds the header once" \
+    "grep -qx BRIGHTNESS_MAX=90 $LIGHT_CONFIG && grep -q 'my own note' $LIGHT_CONFIG && [ \$(grep -c 'Personal overrides only' $LIGHT_CONFIG) = 1 ]"
+check "…leaves a line it can't parse (\$(…)) as it is, and reports it" \
+    "grep -qx 'FOO=\$(echo hi)' $LIGHT_CONFIG && echo \"\$mig1\" | grep -q 'left .*FOO='"
+check "…backs up first and logs a one-line summary to lightd.log" \
+    "[ \$(ls $LIGHT_HOME | grep -c '^config.sh.bak-[0-9]\{8\}-[0-9]\{6\}\$') = 1 ] && grep -q 'BRIGHTNESS_CURVE=\"0:21,134' $LIGHT_HOME/config.sh.bak-* && grep -q 'config migrate: removed 11' $LIGHT_HOME/lightd.log" \
+    "$(cat $LIGHT_HOME/lightd.log 2>/dev/null)"
+sum1="$(cksum < $LIGHT_CONFIG)"
+mig2="$(bash lib/config_migrate.sh 2>&1)"
+check "migration is idempotent: second run changes nothing, makes no second backup" \
+    "[ \"\$(cksum < $LIGHT_CONFIG)\" = \"\$sum1\" ] && [ \$(ls $LIGHT_HOME | grep -c '^config.sh.bak-') = 1 ] && echo \"\$mig2\" | grep -q 'nothing to change'"
+eff="$( . lib/common.sh; echo "$BRIGHTNESS_CURVE|$GAIN_TABLE|$GAIN_GAMMA|$BRIGHTNESS_MIN|$LUMINANCE_COMPENSATION|$BRIGHTNESS_MAX" )"
+check "after migration the effective config is the research curve and the measured GAIN_TABLE (1.23), with BRIGHTNESS_MAX=90" \
+    "[ \"\$eff\" = \"$RESEARCH_CURVE|$NEW_TABLE|1.23|0|0|90\" ]" "effective: $eff"
+printf 'BACKEND=lunar\nLUX_SOURCE=lunar\nSTALE_SECS=300\nM1DDC=~/.lighting/tools/m1ddc-1x   # probe 04\nBRIGHTNESS_CURVE="0:21,13:31,40:36,100:45,1000:100"\n' > "$LIGHT_CONFIG"
+bash lib/config_migrate.sh >/dev/null 2>&1
+check "migration keeps M1DDC=…m1ddc-1x, the Lunar choices (BACKEND/LUX_SOURCE=lunar, STALE_SECS=300) and a curve with a learned point" \
+    "grep -q '^M1DDC=~/.lighting/tools/m1ddc-1x' $LIGHT_CONFIG && grep -qx BACKEND=lunar $LIGHT_CONFIG && grep -qx LUX_SOURCE=lunar $LIGHT_CONFIG && grep -qx STALE_SECS=300 $LIGHT_CONFIG && grep -q '^BRIGHTNESS_CURVE=' $LIGHT_CONFIG"
+check "…and lightd's check finds nothing stale in it" "[ -z \"\$(. lib/config_migrate.sh; config_stale_keys)\" ]"
+fresh "GOVEE_IPS= NEUTRAL_ON_EXIT=0 SENSOR_URL=http://127.0.0.1:18099/events
+BRIGHTNESS_CURVE=\"$SEED\"
+GAIN_GAMMA=2.2
+BRIGHTNESS_MAX=90"
+bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 1.5
+kill -TERM $DPID; wait $DPID 2>/dev/null
+check "lightd warns once at start for each key with an old value (seed curve, GAIN_GAMMA=2.2), not for a custom one" \
+    "[ \$(grep -c 'config.sh overrides BRIGHTNESS_CURVE with an old value; run bin/light update' $LIGHT_HOME/lightd.log) = 1 ] && [ \$(grep -c 'overrides GAIN_GAMMA with an old value' $LIGHT_HOME/lightd.log) = 1 ] && ! grep -q 'overrides BRIGHTNESS_MAX' $LIGHT_HOME/lightd.log" \
+    "$(grep overrides $LIGHT_HOME/lightd.log)"
+
+# bin/light update against a temp bare repo and clone. HOME is a temp dir too, so there is no
+# git identity (the stash fallback is exercised), no launchd agent, and launchctl is a stub.
+UPH="$(mktemp -d)"; UPBIN="$(mktemp -d)"
+printf '#!/bin/sh\necho "launchctl $*" >> "%s/launchctl.log"\n' "$UPH" > "$UPBIN/launchctl"; chmod +x "$UPBIN/launchctl"
+upenv() { env -u LIGHT_UPDATE_NO_RELOAD HOME="$UPH" LIGHT_HOME="$UPH/.lighting" LIGHT_CONFIG="$UPH/.lighting/config.sh" \
+    PATH="$UPBIN:$PATH" GIT_CONFIG_NOSYSTEM=1 LIGHT_UPDATE_BACKOFF=0 "$@"; }
+ugit() { upenv git -c user.name=t -c user.email=t@t "$@"; }
+SRC="$UPH/src"; BARE="$UPH/remote.git"; CLONE="$UPH/lunar-lighting"
+mkdir -p "$SRC"; cp -R "$ROOT" "$SRC/lighting-prototype"; rm -rf "$SRC/lighting-prototype/probe/results" "$SRC/lighting-prototype/probe/__pycache__"
+ugit init -q "$SRC"; ugit -C "$SRC" symbolic-ref HEAD refs/heads/main
+ugit -C "$SRC" add -A; ugit -C "$SRC" commit -qm "one"
+ugit clone -q --bare "$SRC" "$BARE"; ugit -C "$SRC" remote add origin "$BARE"; ugit -C "$SRC" fetch -q origin
+ugit -C "$SRC" branch -q -u origin/main
+ugit clone -q "$BARE" "$CLONE"
+# The next commit changes bin/light itself: the update must run the new version after the pull.
+awk 'NR == 2 { print "[ \"$2\" = --after-pull ] && echo \"new bin/light ran\"" } { print }' "$SRC/lighting-prototype/bin/light" > "$UPH/light.new"
+cat "$UPH/light.new" > "$SRC/lighting-prototype/bin/light"
+ugit -C "$SRC" commit -qam "two: a newer bin/light"; ugit -C "$SRC" push -q origin main
+mkdir -p "$UPH/.lighting"; printf 'GAIN_GAMMA=2.2\nBRIGHTNESS_MAX=90\n' > "$UPH/.lighting/config.sh"
+echo "my local edit" >> "$CLONE/lighting-prototype/README.md"
+mkdir -p "$CLONE/lighting-prototype/probe/results"; echo "measurement" > "$CLONE/lighting-prototype/probe/results/05-gain.txt"
+up1="$(upenv bash "$CLONE/lighting-prototype/bin/light" update 2>&1)"; rc=$?
+check "light update: a fast-forward pull works, lists the new commits, and runs the new bin/light" \
+    "[ $rc = 0 ] && [ \"\$(git -C $CLONE rev-parse HEAD)\" = \"\$(git -C $SRC rev-parse HEAD)\" ] && echo \"\$up1\" | grep -q 'two: a newer bin/light' && echo \"\$up1\" | grep -q 'new bin/light ran'" "$up1"
+check "…a dirty tracked file is stashed (stash kept, edit recoverable), untracked probe/results untouched" \
+    "git -C $CLONE stash list | grep -q 'light update [0-9-]* [0-9:]*' && git -C $CLONE stash show -p | grep -q 'my local edit' && ! grep -q 'my local edit' $CLONE/lighting-prototype/README.md && [ \"\$(cat $CLONE/lighting-prototype/probe/results/05-gain.txt)\" = measurement ] && echo \"\$up1\" | grep -q 'git -C .* stash show -p'"
+check "…the config is migrated (GAIN_GAMMA=2.2 removed, BRIGHTNESS_MAX=90 kept, backup made)" \
+    "! grep -q GAIN_GAMMA $UPH/.lighting/config.sh && grep -qx BRIGHTNESS_MAX=90 $UPH/.lighting/config.sh && ls $UPH/.lighting | grep -q '^config.sh.bak-' && echo \"\$up1\" | grep -q 'removed  GAIN_GAMMA=2.2'"
+check "…and with no launchd agent installed, launchctl is never called" \
+    "[ ! -e $UPH/launchctl.log ] && echo \"\$up1\" | grep -q 'no launchd agent installed'"
+mkdir -p "$UPH/Library/LaunchAgents"; : > "$UPH/Library/LaunchAgents/com.lighting.lightd.plist"
+echo three >> "$SRC/lighting-prototype/README.md"; ugit -C "$SRC" commit -qam "three"; ugit -C "$SRC" push -q origin main
+up2="$(upenv bash "$CLONE/lighting-prototype/bin/light" update 2>&1)"; rc=$?
+check "with the agent installed, update reloads it through install.sh (launchctl bootstrap)" \
+    "[ $rc = 0 ] && grep -q 'launchctl bootstrap' $UPH/launchctl.log && echo \"\$up2\" | grep -q 'reloaded=yes'" "$up2"
+echo "local work" > "$CLONE/lighting-prototype/local.txt"; ugit -C "$CLONE" add lighting-prototype/local.txt; ugit -C "$CLONE" commit -qm "local commit"
+echo four >> "$SRC/lighting-prototype/README.md"; ugit -C "$SRC" commit -qam "four"; ugit -C "$SRC" push -q origin main
+head_before="$(git -C $CLONE rev-parse HEAD)"; stashes_before="$(git -C $CLONE stash list | wc -l)"; cfg_before="$(cksum < $UPH/.lighting/config.sh)"
+echo "dirty again" >> "$CLONE/lighting-prototype/README.md"
+up3="$(upenv bash "$CLONE/lighting-prototype/bin/light" update 2>&1)"; rc=$?
+check "a non-fast-forward stops with a clear message and changes nothing (HEAD, stash, edit, config)" \
+    "[ $rc != 0 ] && echo \"\$up3\" | grep -q 'diverged' && [ \"\$(git -C $CLONE rev-parse HEAD)\" = $head_before ] && [ \$(git -C $CLONE stash list | wc -l) = $stashes_before ] && grep -q 'dirty again' $CLONE/lighting-prototype/README.md && [ \"\$(cksum < $UPH/.lighting/config.sh)\" = \"$cfg_before\" ]" "$up3"
+ugit -C "$CLONE" remote set-url origin "$UPH/missing.git"
+up4="$(upenv bash "$CLONE/lighting-prototype/bin/light" update 2>&1)"; rc=$?
+check "a fetch that keeps failing is tried 3 times, then stops with nothing changed" \
+    "[ $rc != 0 ] && [ \$(echo \"\$up4\" | grep -c 'retrying') = 2 ] && echo \"\$up4\" | grep -q 'failed 3 times' && [ \"\$(git -C $CLONE rev-parse HEAD)\" = $head_before ]" "$up4"
 
 check "the suite left the real probe/results folder (your hardware data) untouched" \
     "[ \"\$(real_results)\" = \"\$REAL_RESULTS_BEFORE\" ]"

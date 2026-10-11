@@ -10,6 +10,15 @@
 #   light bias <pct> [K]           drive the Govee strips directly
 #   light status                   mode, lux, targets, today's write counts
 #   light writes [n]               last n DDC writes (default 20)
+#   light update                   git pull (fast-forward only; local edits stashed, never lost),
+#                                  clean ~/.lighting/config.sh down to your overrides (backup first),
+#                                  reload lightd if it runs under launchd. New defaults just arrive
+
+# Before common.sh: an update must work even if config.sh is broken.
+if [ "$1" = update ]; then
+    . "$(dirname "$0")/../lib/update.sh"
+    shift; light_update "$0" "$@"; exit $?
+fi
 
 . "$(dirname "$0")/../lib/common.sh"
 . "$PROTO_DIR/lib/ddc.sh"
@@ -117,7 +126,7 @@ case "$1" in
         tail -n "${2:-20}" "$LIGHT_HOME/writes.log" 2>/dev/null || echo "no writes yet"
         ;;
     *)
-        sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
         exit 64
         ;;
 esac

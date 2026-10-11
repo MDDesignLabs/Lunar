@@ -3,7 +3,7 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **110 checks, all passing**, against simulators (2026-10-11, after the RESEARCH_07 defaults and probe 08: 97 before, 63 before the 2026-09-26 review fixes). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 109. The full run takes about 4 minutes. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
+- `lighting-prototype/test/run_tests.sh`: **127 checks, all passing**, against simulators (2026-10-11, after `light update` and the config migration, §10: 110 before, 97 before the RESEARCH_07 defaults and probe 08, 63 before the 2026-09-26 review fixes). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 126. The full run takes about 4 minutes. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
   - a fake Govee strip on real UDP sockets (`test/fake_govee.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
@@ -126,6 +126,29 @@ The fake sensor follows KitGuru's brightness table (opt-in: `FAKE_BRIGHTNESS=1`)
 | I-P04 | White screen closed during Part A | `ABORTED`, no `RESULT Q16a`, baseline restored (same as M-14 for probe 05) |
 | I-P05 | Part B, no self-illumination / screen adds light to the sensor | `negligible` / `significant` with the advice; baseline restored |
 | I-P06 | Part B, a small spill in a dark room (over 20% of a ~0.6 lux floor) that can't move brightness | `negligible`: the verdict asks whether lightd's brightness would change by ≥ the dead-band, not whether the reading changed |
+
+### Config migration and `light update` (shell §10, added 2026-10-11)
+
+Temp dirs, a temp bare repo and clone, a temp `HOME` (no git identity, no launchd agent) and a stub `launchctl`. Never the real `~/.lighting` or the real checkout. Not mutation-tested.
+
+| ID | Case | Expected |
+|---|---|---|
+| I-C01 | Stale config: seed curve with the corrupt `134`, `GAIN_GAMMA=2.2`, old example `GAIN_TABLE`, old defaults (`BRIGHTNESS_MIN=5`, `LUMINANCE_COMPENSATION=1`, `MONITOR_NITS_MAX=350`) | All removed |
+| I-C02 | Values equal to the current defaults (`LUNAR` written as the expanded `$HOME/…`, empty `M1DDC_DISPLAY=""`) | Removed |
+| I-C03 | A custom value (`BRIGHTNESS_MAX=90`) and comments | Kept; the header is added once |
+| I-C04 | A line it can't parse (`FOO=$(…)`) | Left as it is and reported |
+| I-C05 | Backup and log | One `config.sh.bak-YYYYMMDD-HHMMSS` holding the original; one summary line in `lightd.log` |
+| I-C06 | Second run | No change, no second backup, "nothing to change" |
+| I-C07 | Effective config after migration (`common.sh`) | RESEARCH_07 curve, measured `GAIN_TABLE`, `GAIN_GAMMA=1.23`, `BRIGHTNESS_MAX=90` |
+| I-C08 | `M1DDC=…m1ddc-1x`, `BACKEND`/`LUX_SOURCE=lunar`, `STALE_SECS=300` with Lunar lux, a curve with a learned point | All kept; lightd's check finds nothing stale |
+| I-C09 | lightd starts on a config with the seed curve and `GAIN_GAMMA=2.2` | One "overrides <KEY> with an old value; run bin/light update" line per stale key; none for `BRIGHTNESS_MAX=90` |
+| I-U01 | `light update`, fast-forward available, and the new commit changes `bin/light` | Clone at upstream; new commits listed; the new `bin/light` ran the second phase |
+| I-U02 | A dirty tracked file and an untracked `probe/results` file | Stash `light update <date>` kept, with the edit; working tree clean; `probe/results` untouched |
+| I-U03 | Config after the update | `GAIN_GAMMA=2.2` removed, `BRIGHTNESS_MAX=90` kept, backup made |
+| I-U04 | No launchd agent installed | `launchctl` never called |
+| I-U05 | Agent plist present | Reloaded through `install.sh` (`launchctl bootstrap`) |
+| I-U06 | Local commit + new upstream commit (diverged) | Stops with "diverged"; HEAD, stash list, the dirty edit and config.sh unchanged |
+| I-U07 | Remote unreachable | Fetch tried 3 times, then stops; HEAD unchanged |
 
 ### Govee (P8)
 

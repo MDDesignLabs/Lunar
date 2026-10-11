@@ -102,6 +102,25 @@ Recommended config:
 
 Ask the user to move the sensor to the top bezel, facing them. Then check self-illumination at night: compare the lux with a black screen and with a white screen.
 
+## Updating (2026-10-11): `bin/light update`
+
+The user's `~/.lighting/config.sh` was a hand-edited copy of an old example, so it pinned stale values (Lunar's seed curve, `GAIN_GAMMA=2.2`, …) and hid new defaults after `git pull`. Now:
+
+- **One command:** `~/lunar-lighting/lighting-prototype/bin/light update`. It:
+  - pulls fast-forward only, retrying the fetch 3 times. A diverged branch stops it with nothing changed;
+  - stashes local edits to tracked files as `light update <date>`, and never drops or pops the stash. Untracked files and `probe/results` are untouched;
+  - re-runs the new `bin/light`, then cleans config.sh down to overrides (backup `config.sh.bak-YYYYMMDD-HHMMSS` first);
+  - reloads the launchd agent via `install.sh` if it's installed. If lightd runs in a Terminal, it says to restart it;
+  - prints the new commits and what the clean-up removed and kept.
+- **The measured gains are now repo defaults:** `GAIN_TABLE` and `GAIN_GAMMA=1.23` from probe 05 (RESEARCH_03 §2). So **the user never needs to hand-edit config.sh again for repo defaults.** Personal settings stay: any value the clean-up doesn't recognise, comments, `M1DDC=…m1ddc-1x`, `BACKEND`/`LUX_SOURCE=lunar`.
+- **Removed:** values equal to the current default, an old default from any earlier `config.example.sh`, or Lunar's seed curve (with or without the corrupt `134`). Lines it can't parse (`$(…)`, multi-line) are left alone and listed.
+- **A plain `git pull` without `update`:** lightd logs `config.sh overrides <KEY> with an old value; run bin/light update` at start.
+- `install.sh` runs the same clean-up. A new install gets a header-only config.sh instead of a full copy.
+- **UNVERIFIED on the Mac:**
+  - `git stash` and the update as a whole have only run against temp repos on Linux (test §10);
+  - the launchd reload is the same path as `install.sh`, which has run on the Mac;
+  - the clean-up hasn't seen the user's real config.sh. Ask them to paste the update's output, and check the `kept` lines.
+
 ## Review fixes (2026-09-26) that change the hardware steps
 
 Six review agents checked the code, probes, tests and docs. Every finding and its verdict is in `REVIEW_2026-09-26.md`. What changed for you:

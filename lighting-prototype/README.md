@@ -6,9 +6,9 @@ The verdict (how much of the app this delivers, and whether to build the Swift a
 
 ```
 bin/lightd      adaptive loop (lux → filter → targets → rate-limited DDC + Govee). Runs under launchd
-bin/light       one-shot control: critical on|off|toggle · kelvin <K> · neutral · bias · status · writes
+bin/light       one-shot control: critical on|off|toggle · kelvin <K> · neutral · bias · status · writes · update
 bin/govee       Govee LAN API from the shell: discover · on/off · brightness · kelvin · rgb · raw
-lib/            engine.awk (pure maths) · ddc.sh (write scheduler) · govee.sh · apply.sh · common.sh
+lib/            engine.awk (pure maths) · ddc.sh (write scheduler) · govee.sh · apply.sh · common.sh · config_migrate.sh · update.sh
 probe/          hardware measurements: run these first, on the Mac
 swiftbar/       menu bar UI via SwiftBar (open source)
 test/           simulators + test suite (runs anywhere: `test/run_tests.sh`)
@@ -47,8 +47,8 @@ How probe 05 works without a colorimeter:
 ## 2. Run it
 
 ```bash
-./install.sh                     # copies config to ~/.lighting/config.sh, starts lightd under launchd
-$EDITOR ~/.lighting/config.sh    # paste GAIN_TABLE/GAIN_GAMMA from probe 05; set GOVEE_IPS from probe 07
+./install.sh                     # creates ~/.lighting/config.sh (your overrides only), starts lightd under launchd
+$EDITOR ~/.lighting/config.sh    # only what you change, e.g. GOVEE_IPS from probe 07. Defaults: config.example.sh
 bin/light status
 bin/light critical toggle        # the override
 tail -f ~/.lighting/lightd.log ~/.lighting/writes.log
@@ -73,6 +73,18 @@ tail -f ~/.lighting/lightd.log ~/.lighting/writes.log
 
 The override bypasses the intervals, never the caps or the no-op check.
 
+## Updating
+
+```bash
+bin/light update
+```
+
+- **What it does:** `git pull --ff-only` on your branch (as a fetch, retried 3 times on network errors, then a fast-forward), then runs the new `bin/light` for the rest.
+- **Config:** cleans `~/.lighting/config.sh` down to your own overrides, after a backup (`config.sh.bak-YYYYMMDD-HHMMSS`). It removes lines that repeat the current default, an old default or a superseded value (Lunar's seed curve, `GAIN_GAMMA=2.2`). It keeps everything else: comments, values it doesn't recognise, and lines it can't read safely. New defaults in `config.example.sh` then reach you with each update; you never edit config.sh for them.
+- **lightd:** reloaded through `install.sh` if the launchd agent is installed. If you run it in a Terminal instead, it tells you to restart it.
+- **Safety:** local edits to tracked files go into a `git stash` named `light update <date>` (`git stash list`, `git stash show -p`); it's never dropped or popped. Untracked and ignored files, such as `probe/results`, are never touched. If your branch has diverged from upstream, it stops and changes nothing. No reset, rebase or `--force`.
+- After a plain `git pull` without `light update`, lightd logs `config.sh overrides <KEY> with an old value; run bin/light update` at start.
+
 ## 3. Menu bar and Shortcuts
 
 **SwiftBar** (menu bar icon showing live Kelvin, the override toggle, and write counts):
@@ -91,7 +103,7 @@ ln -s "$PWD/swiftbar/lighting.10s.sh" ~/SwiftBarPlugins/      # or whichever fol
 
 ## 4. Known limits (all tested against simulators only)
 
-- **Real hardware so far (2026-10-11):** the AOC and the ESP32 have run with lightd, under launchd and after a reboot. Probe 05 has run. The Govee bars haven't (none bought). `test/run_tests.sh` proves the logic, packet formats, rate limits and probe analysis against simulators: 110 checks, all passing (109 plus one SKIP on a machine with no multicast route). The probes are what prove the hardware.
+- **Real hardware so far (2026-10-11):** the AOC and the ESP32 have run with lightd, under launchd and after a reboot. Probe 05 has run. The Govee bars haven't (none bought). `test/run_tests.sh` proves the logic, packet formats, rate limits and probe analysis against simulators: 127 checks, all passing (126 plus one SKIP on a machine with no multicast route). The probes are what prove the hardware.
 - **Local Network privacy (macOS 15+) may block `curl`/`nc` when started by launchd.** Apple's TN3179 exempts tools run from Terminal and launchd *daemons*, but says launchd *agents* (how `install.sh` runs `lightd`) are not exempt (docs/lighting-app/RESEARCH_04 §2). After installing, check that lux updates (`bin/light status`, twice); if it doesn't, run `bin/lightd` from Terminal instead. **On the author's Mac (macOS 26.7) the agent was not blocked** (2026-10-11); why is unverified, and a macOS update could change it. `LUX_SOURCE=lunar` sidesteps it for the sensor, because Lunar already has the permission. Govee UDP may still be blocked. If `lightd.log` shows Govee sends but the strips don't react under launchd while `bin/govee` works from Terminal, this is why.
 - `lunar lux --listen` only emits when the value changes. In a perfectly steady room that looks like a stale sensor, and `lightd` reconnects every `STALE_SECS`. That's why the default `STALE_SECS` is 300; with `LUX_SOURCE=sse`, 60 is enough.
 - **Daily write caps also bound the override, with a reserve.** Adaptive writes stop at `BRIGHTNESS_DAILY_CAP` / `GAIN_DAILY_CAP`. Writes back to neutral (the override, neutral on exit or after a crash) may use `OVERRIDE_RESERVE` more per channel. If even that is used up, or another DDC app is running, `light critical on` exits 1 and says why, and the menu bar shows "NOT neutral" instead of the override icon.

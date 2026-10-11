@@ -8,7 +8,9 @@ if [ "$1" = --uninstall ]; then
     rm -f "$PLIST"; echo "lightd removed (config kept in ~/.lighting)"; exit 0
 fi
 mkdir -p "$HOME/.lighting" "$HOME/Library/LaunchAgents"
-[ -f "$HOME/.lighting/config.sh" ] || cp "$PROTO/config.example.sh" "$HOME/.lighting/config.sh"
+# config.sh holds only your overrides; the defaults come from config.example.sh. A new install
+# gets a header-only file; an old full copy is cleaned down to its overrides (backup first).
+bash "$PROTO/lib/config_migrate.sh" "$HOME/.lighting/config.sh" || echo "config clean-up failed; config.sh left as it is" >&2
 chmod +x "$PROTO"/bin/* "$PROTO"/probe/*.sh
 sed -e "s|__PROTO__|$PROTO|g" -e "s|__HOME__|$HOME|g" "$PROTO/launchd/com.lighting.lightd.plist.template" > "$PLIST"
 launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true

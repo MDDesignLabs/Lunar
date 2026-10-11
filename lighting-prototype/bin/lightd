@@ -83,6 +83,9 @@ if [ "$(current_mode)" = critical ]; then
     apply_targets "$(state_get filtered 2)" 1 || log "override not restored yet (rc $?); retrying as samples arrive"
 fi
 log "lightd start: backend=$BACKEND lux=$LUX_SOURCE mode=$(current_mode)"
+# A pull without `light update` leaves old values in config.sh that hide the new defaults.
+. "$PROTO_DIR/lib/config_migrate.sh"
+for k in $(config_stale_keys); do log "config.sh overrides $k with an old value; run bin/light update"; done
 
 prev_lf="$(state_get filtered "")"
 acted_lf="$(state_get acted "")"

@@ -1,5 +1,7 @@
-# Lighting prototype configuration.
-# Copy to ~/.lighting/config.sh and edit. Plain shell: KEY=value, no spaces around '='.
+# Lighting prototype configuration: the repo defaults.
+# Don't copy this file. lib/common.sh reads it first, then ~/.lighting/config.sh, which holds
+# only the keys you change (plain shell: KEY=value, no spaces around '='). That way new
+# defaults arrive with `bin/light update` (git pull + config clean-up).
 
 # ── Backend ────────────────────────────────────────────────────────────────
 # "m1ddc": no Lunar. This prototype does brightness AND white point, writing DDC
@@ -62,15 +64,13 @@ KELVIN_FLOOR=4000                 # never warmer than this, whatever the table o
 KELVIN_MIN_INTERVAL=600           # seconds between adaptive gain sets
 GAIN_DAILY_CAP=30                 # per channel (conservative)
 GAIN_GAP_MS=100                   # pause between the R, G and B writes in one set
-# Kelvin:R:G:B calibration table. Measured points only. These are YOUR derived
-# values and are UNVERIFIED until probe 05 tells you the AOC's gain domain.
-# Replace with the table probe 05 prints.
-GAIN_TABLE="6500:50:50:50,5500:50:47:44,5000:50:46:40,4500:50:44:36"
-# The AOC's effective gain exponent (1.0 = linear light, 2.2 = gamma-encoded).
-# Probe 05 measures it. Only used for luminance compensation. 1.0 until measured: if the
-# truth is 2.2 this under-compensates (screen slightly dim when warm); a guessed 2.2 could
-# over-brighten by ~9% at 5000K if the truth is 1.0.
-GAIN_GAMMA=1.0
+# Kelvin:R:G:B calibration table. Measured by probe 05 on this desk's AOC on 2026-10-11
+# (docs/lighting-app/RESEARCH_03_COLOUR.md section 2): the gains act in linear light with a
+# small offset, and 50 is the ceiling. The room wasn't dark; blue is the least certain channel.
+GAIN_TABLE="6500:50:50:50,6000:50:48:47,5500:50:46:43,5000:50:43:35,4500:50:40:27,4000:50:37:21"
+# The AOC's effective gain exponent (1.0 = linear light, 2.2 = gamma-encoded). Probe 05,
+# 2026-10-11: 1.23 (RESEARCH_03 section 2). Only used for luminance compensation.
+GAIN_GAMMA=1.23
 
 # ── Colour-critical override ───────────────────────────────────────────────
 CRITICAL_GAINS="50:50:50"         # calibrated D65 neutral (R:G:B). Adaptive gains never go above it

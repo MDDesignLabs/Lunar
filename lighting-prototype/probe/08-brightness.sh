@@ -137,8 +137,9 @@ if [ $DO_B = 1 ]; then
 
     say "Analysis (Part B)"
     cfg="${LIGHT_CONFIG:-$HOME/.lighting/config.sh}"
-    curve="$( [ -f "$cfg" ] && . "$cfg"; echo "${BRIGHTNESS_CURVE:-}")"
-    db="$( [ -f "$cfg" ] && . "$cfg"; echo "${BRIGHTNESS_DEADBAND:-2}")"
+    # Defaults first, then the overrides, as lightd reads them.
+    curve="$( . "$PROBE_DIR/../config.example.sh"; [ -f "$cfg" ] && . "$cfg"; echo "$BRIGHTNESS_CURVE")"
+    db="$( . "$PROBE_DIR/../config.example.sh"; [ -f "$cfg" ] && . "$cfg"; echo "${BRIGHTNESS_DEADBAND:-2}")"
     python3 "$PROBE_DIR/analyze_brightness.py" --self "$CSV" ${curve:+--curve "$curve"} --deadband "$db" | tee -a "$RESULTS/$OUT"
     note "Raw data: $CSV."
 fi
