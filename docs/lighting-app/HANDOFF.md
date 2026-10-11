@@ -87,6 +87,25 @@ From `bin/light writes`, `lightd.log` and `pgrep` that the user pasted:
 - **Running under launchd (Q8): works.** After `./install.sh`, the agent (pid matching `launchctl print`) received live lux that changed when the sensor was covered. That's against TN3179's expectation for agents; the reason is UNVERIFIED. **Confirmed after a reboot** with nothing started by hand: current lux, and `last sent` matching the target.
 - **Restart cost:** each stop writes neutral and each start writes the warm gains back, so 2 writes per changing channel per restart. A day of testing with ~7 restarts used 14 of 30 on green and blue. On a normal day (at most one restart) that's ~2, well inside the budget.
 
+## First update on the Mac (2026-10-11)
+
+The `bin/light` on the Mac predates `bin/light update`, and the clone has local edits (the `[!]` in the prompt), so a plain `git pull` may refuse. Run this once from `~/lunar-lighting`:
+```
+git stash push -m "before first light update" && git pull --ff-only && lighting-prototype/bin/light update
+```
+After that, `bin/light update` is the only command needed. It trims `~/.lighting/config.sh` to personal overrides (with a dated backup), so the research curve, `BRIGHTNESS_MIN=0`, compensation off and the measured gain table come from the repo. The stash holds the old local edits; nothing deletes it.
+
+## Bias light and light bar (2026-10-11)
+
+- **Govee:** the user bought what RESEARCH_08 identifies as the H6056 "Flow Plus" bars; confirm on the box. Plan in BUILD_PLAN Phase 0b. The order is:
+  1. Govee Home app: Wi-Fi on 2.4 GHz, then switch on **LAN Control** for each bar.
+  2. Run probe 07 on the real device.
+  3. Make the prototype fixes: turn-off support, an absolute 5 cd/m² wall target, a Kelvin clamp, and discovery.
+  4. Calibrate the wall, then soak.
+
+  Keep `GOVEE_IPS=""` until the fixes land; the current code can't turn the bars off.
+- **Xiaomi light bar:** ask the user to read the model number on the label (Q20). The app only ever **asks**; it never switches the bar by itself (FR-80). Most likely it's remote-only, so the prompt is a reminder.
+
 ## Brightness curve (2026-10-11)
 
 The user found the screen too bright in a dark room. RESEARCH_07 has the sources and the check:

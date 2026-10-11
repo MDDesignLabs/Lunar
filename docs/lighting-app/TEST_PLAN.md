@@ -198,6 +198,7 @@ Run it before each phase gate. Record pass/fail and write counts.
 | M-13 | Sensor facing a lamp (saturation) | Values filtered; no wild jumps (firmware drops 65535) |
 | M-14 | Click the white screen during probe 05 or 08 | Probe stops with "ABORTED", restores the monitor, prints no verdict |
 | M-15 | Switch the room from ~300 to ~30 lux and back, timing each | Brightening within 3 units of target in ≤ 90 s; darkening per the NFR-02 decision |
+| M-16 | Evening, room < 5 lx for 10 min, light bar off | Exactly one prompt (notification and popover row); "Not tonight" suppresses it until 06:00; turning the room lights on withdraws it; nothing ever switches the bar without a yes (FR-80–87) |
 
 ---
 
@@ -254,7 +255,16 @@ Run it before each phase gate. Record pass/fail and write counts.
 | FR-51 | — | I-D11 | M-02 |
 | FR-52 | — | — | M-04 |
 | FR-53 | — | — | M-03 |
-| FR-60/61 | — | I-G01–G03 | probe 07 |
+| FR-60/61 | — | I-G01–G03; planned: discovery joins the multicast group, unicast scan, sender-address fallback | probe 07 (checks A–I, RESEARCH_08) |
+| FR-62 | planned: wall-nits → % inversion through `BIAS_CAL` | — | probe 07 check F (wall calibration) |
+| FR-63 | planned: Kelvin clamped to 2200–6500 | planned: no out-of-range `colorTemInKelvin` sent | — |
+| FR-64 | — | planned: `turn 0` above `BIAS_OFF_LUX`, on display sleep, on clean exit | M-01, M-02 (bias off while asleep) |
+| FR-65/66 | — | planned: ≤ 1 update per 2 s, coalescing, refresh without `turn 1` | soak |
+| FR-67 | — | planned: "not responding" after 3 missed `devStatus` | unplug the bars |
+| FR-80 | — | planned: no light-bar command without a yes, in any code path | code review + M-16 |
+| FR-81/82/85 | planned: ask/suppress/withdraw state machine (lux, time, evening window) | — | M-16: an evening at < 5 lx for 10 min gives exactly one prompt |
+| FR-83/84/86 | — | planned: remote-only sends nothing; a controllable model sends exactly one command | — |
+| FR-87 | — | — | the popover row is shown with notifications denied |
 | FR-70/71 | — | — | P6-T03, P1-T07 reboot test |
 | NFR-01 | — | — | M-08 timing, regression 1 |
 | NFR-02 | — | — | M-15 |
