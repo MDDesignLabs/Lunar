@@ -104,7 +104,10 @@ while true; do
         case "$lux" in *[0-9]*) ;; *) continue ;; esac
         got_any=1; backoff=1
         t="$(now)"; dt=$(( t - last_t )); [ $dt -lt 1 ] && dt=1
-        force=0
+        # The first apply after start is like a wake: write the right values now. Otherwise
+        # the neutral written on the previous exit would hold the white point at 6500K for
+        # up to KELVIN_MIN_INTERVAL. Daily caps still apply.
+        force=0; [ -z "$acted_mode" ] && force=1
 
         if [ $dt -gt "$WAKE_GAP" ]; then
             woke="$(last_wake)"

@@ -69,6 +69,23 @@ The first run measured flat readings close to the floor on every channel (≈2.6
 
 Also report probe 03 and 04 results (Q1, Q2, Q14). They were run, but the results haven't reached the docs yet.
 
+## First live run (2026-10-11, lightd from Terminal)
+
+From `bin/light writes`, `lightd.log` and `pgrep` that the user pasted:
+
+- **Working on the real hardware:**
+  - live lux from the ESP32;
+  - brightness following it, with writes at least 60 s apart;
+  - display sleep pausing writes, and wake reapplying once after 8 s (TEST_PLAN M-02);
+  - neutral gains on exit (FR-45).
+- **m1ddc write time:** 65–81 ms per write, with stock double send. That puts the three-gain override at about 0.4 s including the 100 ms gaps, well inside NFR-01's 2 s.
+- **One lightd only.** `pgrep` shows three `bin/lightd` processes, but they're one lightd and its stream helpers: the main loop, the stream subshell and the `while read` subshell.
+- **The colour table in use (5000 K = 50/43/35)** isn't the example table's, so probe 05's results appear to be in the config. Still to paste: the probe 05 output.
+- **Fixed after this run:**
+  - a restart left gains neutral for up to 10 min, because the exit's neutral write started the gain interval. The first apply after start is now forced, like a wake;
+  - a brightness write deferred by the interval wasn't retried once lux stopped moving. This log didn't hit it, because lux kept changing.
+- **Not tested yet:** running under launchd (Q8). This run was from Terminal.
+
 ## Review fixes (2026-09-26) that change the hardware steps
 
 Six review agents checked the code, probes, tests and docs. Every finding and its verdict is in `REVIEW_2026-09-26.md`. What changed for you:
@@ -105,4 +122,4 @@ Six review agents checked the code, probes, tests and docs. Every finding and it
     - what to watch over the next week
     - a go/no-go on the Swift v1, and on buying Lunar Pro
 
-Tests: `lighting-prototype/test/run_tests.sh` (96 checks, all passing (95 plus one SKIP on a machine with no multicast route), simulators only) runs anywhere, in about 3 minutes. Since 2026-09-26 it writes only to a temp folder: it no longer touches `probe/results/`, so running it after a probe is safe. (Before that fix it deleted that folder. If you ran the tests after a probe with an older checkout, check the results are still there.)
+Tests: `lighting-prototype/test/run_tests.sh` (97 checks, all passing (96 plus one SKIP on a machine with no multicast route), simulators only) runs anywhere, in about 3 minutes. Since 2026-09-26 it writes only to a temp folder: it no longer touches `probe/results/`, so running it after a probe is safe. (Before that fix it deleted that folder. If you ran the tests after a probe with an older checkout, check the results are still there.)

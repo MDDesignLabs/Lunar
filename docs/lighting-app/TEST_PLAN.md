@@ -3,7 +3,7 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **96 checks, all passing**, against simulators (2026-09-26, after two rounds of review fixes; 63 before). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 95. Every check added in those rounds was confirmed by reintroducing the bug it targets in a copy and seeing the suite fail. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
+- `lighting-prototype/test/run_tests.sh`: **97 checks, all passing**, against simulators (2026-09-26, after two rounds of review fixes; 63 before). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 96. Every check added in those rounds was confirmed by reintroducing the bug it targets in a copy and seeing the suite fail. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
   - a fake Govee strip on real UDP sockets (`test/fake_govee.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
@@ -90,7 +90,8 @@ Only some of these have a shell check today (marked "shell §N"). The rest are s
 | I-D10 | Concurrent writes from two tasks | Serialised; never interleaved (actor) |
 | I-D11 | Write while the display is asleep | Not sent; after wake, one reapply. Shell §8 checks "not sent" and "writes resume", not "exactly one" |
 | I-D12 | Adaptive gain set deferred by the interval, then lux stops moving | Applied once the interval passes (shell §2, §9) |
-| I-D12b | Adaptive brightness write deferred by the interval, then lux stops moving | Applied once the interval passes (shell §9). Added 2026-10-11 after it showed up on real hardware |
+| I-D12b | Adaptive brightness write deferred by the interval, then lux stops moving | Applied once the interval passes (shell §9). Added 2026-10-11, found while reading the code for the first live run |
+| I-D12c | Restart in a dim room right after the exit's neutral write | Warm gains applied at once, not after the gain interval (shell §9). Added 2026-10-11 from the first live run |
 | I-D13 | Lock left by a dead process | Broken at once; a live owner is waited for ≤ 60 s, then the write is skipped (shell §2 checks the dead case) |
 | I-D14 | Override blocked (another DDC app, reserve used up, write failure) | Command exits non-zero with the reason; status and menu show "not neutral", never "ON" (shell §8) |
 | I-D15 | Override turned on while an adaptive set waits for the lock | The adaptive set is dropped (shell §2) |
@@ -144,7 +145,7 @@ Run it before each phase gate. Record pass/fail and write counts.
 | ID | Scenario | Pass if |
 |---|---|---|
 | M-01 | Mac sleep 30 min, then wake | Correct gains and brightness within 15 s; exactly one reapply in the write log |
-| M-02 | Display sleeps while the Mac stays awake (energy settings), then wake | Same as M-01; no writes while asleep |
+| M-02 | Display sleeps while the Mac stays awake (energy settings), then wake | Same as M-01; no writes while asleep. **Passed 2026-10-11** on the real AOC: no writes while asleep for 18 min, then one reapply 8 s after wake |
 | M-03 | Lock screen, then unlock | Correct state after unlock. Writes while locked are allowed (FR-53: not lock-gated in v1) |
 | M-04 | Unplug the monitor cable, then replug | No crash; transport rediscovered; values reapplied once |
 | M-05 | Power the monitor off with its button, then on | Values correct after (depends on Q5) |
