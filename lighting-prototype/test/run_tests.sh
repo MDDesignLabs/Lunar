@@ -326,6 +326,12 @@ check "probe 08 Part B: a sensor the screen doesn't light → 'negligible'" "ech
 check "…and Part B restores the baseline (50/47/44, brightness 60)" \
     "[ \$(cat \$MOCK_DIR/m1ddc_green) = 47 ] && [ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ] && [ \$(cat \$MOCK_DIR/m1ddc_luminance) = 60 ]"
 probe_env
+FAKE_BRIGHTNESS=1 FAKE_BEZEL=1 FAKE_SELF=0.002 python3 test/fake_screen_sensor.py 18094 1.0 0 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+res="$(yes "" | PATH="$FAKEBIN:$PATH" SENSOR_URL=http://127.0.0.1:18094/events SETTLE=0.2 WINDOW=0.6 bash probe/08-brightness.sh --part-b-only 2>&1)"
+kill $SP
+check "probe 08 Part B: a small spill in a dark room (well over 20% of a ~0.6 lux floor) that can't move brightness → 'negligible'" \
+    "echo \"\$res\" | grep -q 'RESULT Q16b: negligible'" "$(echo "$res" | tail -10)"
+probe_env
 FAKE_BRIGHTNESS=1 FAKE_BEZEL=1 FAKE_SELF=0.5 python3 test/fake_screen_sensor.py 18094 1.0 0 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
 res="$(yes "" | PATH="$FAKEBIN:$PATH" SENSOR_URL=http://127.0.0.1:18094/events SETTLE=0.2 WINDOW=0.6 bash probe/08-brightness.sh --part-b-only 2>&1)"
 kill $SP

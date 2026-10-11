@@ -136,6 +136,9 @@ if [ $DO_B = 1 ]; then
     stop_patch
 
     say "Analysis (Part B)"
-    python3 "$PROBE_DIR/analyze_brightness.py" --self "$CSV" | tee -a "$RESULTS/$OUT"
+    cfg="${LIGHT_CONFIG:-$HOME/.lighting/config.sh}"
+    curve="$( [ -f "$cfg" ] && . "$cfg"; echo "${BRIGHTNESS_CURVE:-}")"
+    db="$( [ -f "$cfg" ] && . "$cfg"; echo "${BRIGHTNESS_DEADBAND:-2}")"
+    python3 "$PROBE_DIR/analyze_brightness.py" --self "$CSV" ${curve:+--curve "$curve"} --deadband "$db" | tee -a "$RESULTS/$OUT"
     note "Raw data: $CSV."
 fi

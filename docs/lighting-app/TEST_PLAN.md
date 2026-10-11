@@ -3,7 +3,7 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **109 checks, all passing**, against simulators (2026-10-11, after the RESEARCH_07 defaults and probe 08: 97 before, 63 before the 2026-09-26 review fixes). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 108. The full run takes about 4 minutes. Every check added in those rounds was confirmed by reintroducing the bug it targets in a copy and seeing the suite fail. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
+- `lighting-prototype/test/run_tests.sh`: **110 checks, all passing**, against simulators (2026-10-11, after the RESEARCH_07 defaults and probe 08: 97 before, 63 before the 2026-09-26 review fixes). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 109. The full run takes about 4 minutes. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
   - a fake Govee strip on real UDP sockets (`test/fake_govee.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
@@ -125,6 +125,7 @@ The fake sensor follows KitGuru's brightness table (opt-in: `FAKE_BRIGHTNESS=1`)
 | I-P03 | Write count | Part A: 23 (19 + 4 restore). Both parts: 30 (19 + 7 + 4 restore), as in the probe's header |
 | I-P04 | White screen closed during Part A | `ABORTED`, no `RESULT Q16a`, baseline restored (same as M-14 for probe 05) |
 | I-P05 | Part B, no self-illumination / screen adds light to the sensor | `negligible` / `significant` with the advice; baseline restored |
+| I-P06 | Part B, a small spill in a dark room (over 20% of a ~0.6 lux floor) that can't move brightness | `negligible`: the verdict asks whether lightd's brightness would change by ≥ the dead-band, not whether the reading changed |
 
 ### Govee (P8)
 

@@ -24,7 +24,8 @@ KITGURU = [(0, 55.2), (25, 139.5), (50, 221.5), (75, 297.9), (100, 371.6)]
 KG_MAX = 371.6
 TOLERANCE = 0.05          # "matches the review" = within ±0.05 of relative luminance at every step
 DRIFT_WARN = 0.05         # 50% read twice; more than 5% of the signal apart = something moved
-SELF_NEGLIGIBLE = 0.20    # white − black under 20% of the black reading
+MID_BRIGHTNESS = 50       # Part B is measured here (probe/08-brightness.sh)
+RESEARCH_CURVE = "0:0,10:0,50:1,100:7,200:17,300:22,500:31,1000:76,2000:100"
 
 # RESEARCH_07 §3 targets (cd/m²) at the lux points of the recommended curve.
 # 200 lux is log-interpolated between 100 lux (80) and 300 lux (130). 2000 lux = max.
@@ -154,20 +155,60 @@ def invert(pts, target):
     return 100
 
 
-def part_b(path):
+def curve_pct(spec, lux):
+    """lightd's brightness curve (engine.awk): "lux:pct,…", piecewise-linear in log10(lux), lux floored at 0.1."""
+    pts = []
+    for item in spec.split(","):
+        k, _, v = item.partition(":")
+        try:
+            pts.append((math.log10(max(float(k), 0.1)), float(v)))
+        except ValueError:
+            continue
+    pts.sort()
+    return interp(pts, math.log10(max(lux, 0.1)))
+
+
+def kitguru_nits(b):
+    return interp(KITGURU, b)
+
+
+def part_b(path, curve, deadband):
+    """Does the screen's own light, reflected back to the sensor, push lightd's brightness up?
+
+    The screen adds `per_nit` lux at the sensor per cd/m² of white (measured at 50%). At a room
+    level `amb`, lightd settles where b = curve(amb + per_nit · L(b)). Iterate to that point
+    and compare with curve(amb). Worst case: an all-white screen; dark-mode content adds less.
+    """
     rows = dict(read_rows(path))
     if "white" not in rows or "black" not in rows:
         sys.exit("need a white and a black reading in " + path)
     white, black = rows["white"], rows["black"]
-    diff = white - black
+    diff = max(0.0, white - black)
     ratio = f"{white / black:.2f}×" if black > 0 else "n/a (black reads 0)"
-    out = [f"Sensor at its everyday spot, brightness 50: white screen {white:.2f} lux, black screen {black:.2f} lux.",
-           f"Difference {diff:+.2f} lux, ratio {ratio}."]
-    if diff < SELF_NEGLIGIBLE * black or diff <= 0:
-        out.append("RESULT Q16b: negligible. The screen adds under 20% to what the sensor reads, "
-                   "so its own light isn't steering the brightness.")
+    per_nit = diff / kitguru_nits(MID_BRIGHTNESS)
+    out = [f"Sensor at its everyday spot, brightness {MID_BRIGHTNESS}: white screen {white:.2f} lux, "
+           f"black screen {black:.2f} lux.",
+           f"Difference {white - black:+.2f} lux, ratio {ratio}: the screen adds ~{per_nit:.4f} lux at the sensor "
+           "per cd/m² of white (using KitGuru's 221.5 cd/m² at 50%).",
+           "",
+           "  room (lux)   brightness without   with the screen's own light (all-white screen)"]
+    worst = 0.0
+    for amb in sorted({round(black, 2), 1.0, 10.0, 50.0, 100.0, 300.0}):
+        b0 = curve_pct(curve, amb)
+        b = b0
+        for _ in range(50):                      # monotone, converges quickly
+            nb = curve_pct(curve, amb + per_nit * kitguru_nits(b))
+            if abs(nb - b) < 0.01:
+                break
+            b = nb
+        worst = max(worst, b - b0)
+        out.append(f"  {amb:9.2f}    {b0:8.1f}%              {b:8.1f}%   ({b - b0:+.1f})")
+    if worst < deadband:
+        out.append(f"RESULT Q16b: negligible. At most {worst:+.1f} brightness steps from the screen's own light, "
+                   f"under lightd's dead-band of {deadband:g}, so it isn't steering the brightness.")
     else:
-        out.append("RESULT Q16b: significant. The screen is lighting the sensor; consider moving it or tell Claude.")
+        out.append(f"RESULT Q16b: significant. The screen's own light can push brightness up by {worst:.1f} steps "
+                   "on a white page. The screen is lighting the sensor; consider moving it or tell Claude.")
     return "\n".join(out)
 
 
@@ -175,6 +216,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("part_a", nargs="?", help="Part A CSV (brightness,lux)")
     ap.add_argument("--self", dest="part_b", help="Part B CSV (screen,lux)")
+    ap.add_argument("--curve", default=RESEARCH_CURVE, help="BRIGHTNESS_CURVE lightd uses (default: RESEARCH_07's)")
+    ap.add_argument("--deadband", type=float, default=2, help="BRIGHTNESS_DEADBAND (default 2)")
     a = ap.parse_args()
     if not a.part_a and not a.part_b:
         ap.error("give a Part A CSV, --self <Part B CSV>, or both")
@@ -183,7 +226,7 @@ def main():
     if a.part_b:
         if a.part_a:
             print()
-        print(part_b(a.part_b))
+        print(part_b(a.part_b, a.curve, a.deadband))
 
 
 if __name__ == "__main__":
