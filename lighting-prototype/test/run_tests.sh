@@ -75,6 +75,15 @@ check "between table rows the gains interpolate (5250K → 50/47/42)" \
     "awk -f lib/engine.awk -v cmd=targets -v lf=2 -v mode=adaptive -v kdim_lux=1 -v kdim=5250 -v kbright_lux=10 -v kbright=5250 -v kstep=1 -v table='$GAIN_TABLE' -v critical_gains=50:50:50 -v curve=0:50 -v bmin=0 -v bmax=100 -v nits_min=0 -v nits_max=1 -v bias_k=0 -v bias_min=0 -v bias_max=0 | grep -q 'green=47' "
 check "colour-critical ignores lux: 5 lux → 6500K 50/50/50" \
     "t 0.7 critical | grep -q kelvin=6500 && t 0.7 critical | grep -q green=50"
+check "example defaults (RESEARCH_07): 0.5 lux → brightness 0, 300 lux → 22" \
+    "[ \$(t -0.30103 | sed -n 's/brightness=//p') = 0 ] && [ \$(t 2.4771 | sed -n 's/brightness=//p') = 22 ]" \
+    "0.5 lux → $(t -0.30103 | sed -n 's/brightness=//p'), 300 lux → $(t 2.4771 | sed -n 's/brightness=//p')"
+# The next checks need compensation on, a floor of 5 and a curve that is above 0 in a dim room.
+# Those are no longer the defaults, so say so here.
+fresh 'LUMINANCE_COMPENSATION=1
+BRIGHTNESS_MIN=5
+BRIGHTNESS_CURVE="0:10,10:20,40:35,100:50,300:70,1000:100"'
+. lib/common.sh
 b_nocomp="$(LUMINANCE_COMPENSATION=0 engine_targets 1 adaptive | sed -n 's/brightness=//p')"
 b_comp="$(engine_targets 1 adaptive | sed -n 's/brightness=//p')"
 check "luminance compensation raises backlight when warm ($b_nocomp → $b_comp)" "[ $b_comp -gt $b_nocomp ]"
@@ -282,6 +291,47 @@ check "probe 05 stops when the white screen is closed (no verdict from desktop r
     "echo \"\$res\" | grep -q 'ABORTED: the white screen' && ! echo \"\$res\" | grep -q 'RESULT Q3'"
 check "…and restores the baseline" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ]"
 
+# Probe 08 (brightness response + self-illumination). The fake follows KitGuru's table, so Part A
+# should find a match and rebuild the research curve. Ports 18093 (Part A) and 18094 (Part B).
+probe_env
+FAKE_BRIGHTNESS=1 python3 test/fake_screen_sensor.py 18093 1.0 0 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+res="$(yes "" | PATH="$FAKEBIN:$PATH" SENSOR_URL=http://127.0.0.1:18093/events SETTLE=0.2 WINDOW=0.6 bash probe/08-brightness.sh --part-a-only 2>&1)"
+kill $SP
+check "probe 08 Part A: a monitor that follows KitGuru's table → 'RESULT Q16a: MATCHES'" "echo \"\$res\" | grep -q 'RESULT Q16a: MATCHES'" "$(echo "$res" | tail -25)"
+check "probe 08 prints the recommended curve (rebuilds the RESEARCH_07 one from the measurements)" \
+    "echo \"\$res\" | grep -q 'BRIGHTNESS_CURVE=\"0:0,10:0,50:1,100:7,200:17,300:22,500:31,1000:76,2000:100\"'"
+check "probe 08 reports the 50% drift check (none in a steady fake)" "echo \"\$res\" | grep -q 'Drift check: 50% read .*: OK'"
+check "probe 08 restores the recorded baseline (gains 50/47/44, brightness 60)" \
+    "[ \$(cat \$MOCK_DIR/m1ddc_red) = 50 ] && [ \$(cat \$MOCK_DIR/m1ddc_green) = 47 ] && [ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ] && [ \$(cat \$MOCK_DIR/m1ddc_luminance) = 60 ]"
+check "probe 08 Part A makes 19 writes plus 4 to restore (the figure in its header)" "[ \$(calls ' set ') = 23 ]" "writes: $(calls ' set ')"
+probe_env
+FAKE_BRIGHTNESS=1 python3 test/fake_screen_sensor.py 18093 1.0 0 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+printf '\ny\n\n' | PATH="$FAKEBIN:$PATH" SENSOR_URL=http://127.0.0.1:18093/events SETTLE=0.1 WINDOW=0.3 bash probe/08-brightness.sh >/dev/null 2>&1
+kill $SP
+check "probe 08 with both parts: 30 writes in all (19 + 7 + 4 restore), baseline restored" \
+    "[ \$(calls ' set ') = 30 ] && [ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ] && [ \$(cat \$MOCK_DIR/m1ddc_luminance) = 60 ]" "writes: $(calls ' set ')"
+probe_env
+printf '#!/bin/sh\nexec sleep 1\n' > "$LIGHT_HOME/tools/whitepatch"   # the user clicks the white screen after ~1 s
+FAKE_BRIGHTNESS=1 python3 test/fake_screen_sensor.py 18093 1.0 0 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+res="$(yes "" | SENSOR_URL=http://127.0.0.1:18093/events SETTLE=0.2 WINDOW=0.6 bash probe/08-brightness.sh --part-a-only 2>&1)"
+kill $SP
+check "probe 08 stops when the white screen is closed (no verdict from desktop readings)" \
+    "echo \"\$res\" | grep -q 'ABORTED: the white screen' && ! echo \"\$res\" | grep -q 'RESULT Q16a'"
+check "…and restores the baseline gains and brightness" "[ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ] && [ \$(cat \$MOCK_DIR/m1ddc_luminance) = 60 ]"
+probe_env
+FAKE_BRIGHTNESS=1 FAKE_BEZEL=1 python3 test/fake_screen_sensor.py 18094 1.0 0 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+res="$(yes "" | PATH="$FAKEBIN:$PATH" SENSOR_URL=http://127.0.0.1:18094/events SETTLE=0.2 WINDOW=0.6 bash probe/08-brightness.sh --part-b-only 2>&1)"
+kill $SP
+check "probe 08 Part B: a sensor the screen doesn't light → 'negligible'" "echo \"\$res\" | grep -q 'RESULT Q16b: negligible'" "$(echo "$res" | tail -8)"
+check "…and Part B restores the baseline (50/47/44, brightness 60)" \
+    "[ \$(cat \$MOCK_DIR/m1ddc_green) = 47 ] && [ \$(cat \$MOCK_DIR/m1ddc_blue) = 44 ] && [ \$(cat \$MOCK_DIR/m1ddc_luminance) = 60 ]"
+probe_env
+FAKE_BRIGHTNESS=1 FAKE_BEZEL=1 FAKE_SELF=0.5 python3 test/fake_screen_sensor.py 18094 1.0 0 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+res="$(yes "" | PATH="$FAKEBIN:$PATH" SENSOR_URL=http://127.0.0.1:18094/events SETTLE=0.2 WINDOW=0.6 bash probe/08-brightness.sh --part-b-only 2>&1)"
+kill $SP
+check "probe 08 Part B: a screen that lights the sensor → 'significant' with the advice" \
+    "echo \"\$res\" | grep -q 'RESULT Q16b: significant' && echo \"\$res\" | grep -q 'consider moving it or tell Claude'" "$(echo "$res" | tail -8)"
+
 echo "── 8. No-Lunar setup: direct lux, DDC-app guard, nudges, display sleep"
 fresh "LUX_SOURCE=direct KELVIN_MIN_INTERVAL=0 GOVEE_IPS= SENSOR_URL=http://127.0.0.1:18084/events"
 python3 test/fake_sensor.py 18084 0.2 40 40 40 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
@@ -367,7 +417,7 @@ kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
 check "after a restart in a dim room, the warm white point is applied at once, not after the gain interval" \
     "grep -q 'set blue 40' $MOCK_DIR/calls.log"
 
-fresh "GOVEE_IPS= BRIGHTNESS_MIN_INTERVAL=4 TAU_UP=1 SENSOR_URL=http://127.0.0.1:18088/events"
+fresh "GOVEE_IPS= BRIGHTNESS_MIN_INTERVAL=4 TAU_UP=1 BRIGHTNESS_CURVE=\"0:10,10:20,40:35,100:50,300:70,1000:100\" SENSOR_URL=http://127.0.0.1:18088/events"
 python3 test/fake_sensor.py 18088 0.2 5 5 5 5 5 1000 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 7
 kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
@@ -396,7 +446,7 @@ bin/light critical on >/dev/null
 check "the override writes the configured CRITICAL_GAINS (50:49:48), not an assumed 50/50/50" \
     "[ \$(cat \$MOCK_DIR/m1ddc_green) = 49 ] && [ \$(cat \$MOCK_DIR/m1ddc_blue) = 48 ]"
 
-fresh "KELVIN_MIN_INTERVAL=3600 GOVEE_IPS="; . lib/common.sh; . lib/ddc.sh; . lib/govee.sh; . lib/apply.sh
+fresh 'KELVIN_MIN_INTERVAL=3600 GOVEE_IPS= LUMINANCE_COMPENSATION=1 BRIGHTNESS_CURVE="0:10,10:20,40:35,100:50,300:70,1000:100"'; . lib/common.sh; . lib/ddc.sh; . lib/govee.sh; . lib/apply.sh
 state_set last_red 50; state_set last_green 50; state_set last_blue 50; state_set last_t_gainset "$(now)"
 apply_targets 1                     # 10 lux wants 5000K, but the gain set is deferred
 b_on="$(cat $MOCK_DIR/m1ddc_luminance)"; b_plain="$(LUMINANCE_COMPENSATION=0 engine_targets 1 adaptive | sed -n 's/brightness=//p')"

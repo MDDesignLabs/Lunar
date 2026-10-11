@@ -98,6 +98,8 @@ Recommended config:
 - `BRIGHTNESS_MIN=0`
 - `LUMINANCE_COMPENSATION=0`
 
+- Optional: `probe/08-brightness.sh` (Q16). Part A measures how this unit's brightness setting maps to light (sensor flat on the screen, dark room) and prints a corrected `BRIGHTNESS_CURVE` if it differs from KitGuru's review; Part B (sensor at the bezel, lights off) says whether the screen lights the sensor. Run it after a few days on the new curve, in a dark room; at most 30 m1ddc writes, and it needs lightd stopped.
+
 Ask the user to move the sensor to the top bezel, facing them. Then check self-illumination at night: compare the lux with a black screen and with a white screen.
 
 ## Review fixes (2026-09-26) that change the hardware steps

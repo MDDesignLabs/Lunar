@@ -31,7 +31,7 @@ KitGuru measured an AOC CU34G4Z at default settings with an X-Rite i1Display Pro
 - The setting is **close to linear in luminance** (about 3.2 cd/m² per step), slightly bowed in the middle.
 - **The backlight can't go below ~55 cd/m².** The research target for a dark room (20–36) is below the hardware floor.
 - AOC specifies 450 cd/m² ✓ (aoc.com spec page). The review measured 372.
-- Caveats: this is one unit, at default gains, not this user's. The user's warm white point lowers luminance further. With the measured probe 05 response, 5000 K (50/43/35) gives ~0.87× and 4000 K (50/37/21) ~0.75× (derived from RESEARCH_03 §2's straight-line fit), so the floor at night is about 48 cd/m² at 5000 K.
+- Caveats: this is one unit, at default gains, not this user's. **`probe/08-brightness.sh` Part A settles this:** it measures this unit's response with the TSL2591 and says whether it matches the review within ±0.05 (RESULT Q16a). Lux gives the shape only; absolute cd/m² still assume KitGuru's 371.6 at 100%. The user's warm white point lowers luminance further. With the measured probe 05 response, 5000 K (50/43/35) gives ~0.87× and 4000 K (50/37/21) ~0.75× (derived from RESEARCH_03 §2's straight-line fit), so the floor at night is about 48 cd/m² at 5000 K.
 - The agent's first figures (54–357, from a YouTube review) were replaced by these colorimeter numbers.
 
 ## 3. Recommendation
@@ -79,13 +79,13 @@ To actually reach 20–36 cd/m² in a dark room, the dimming must come from some
 
 - **Microsoft:** "Real-world optimum placement … is generally on the same plane as the display, facing the user," near the top of the screen, with a wide field of view (about 110° total). Keep point sources out of view. (Agent's quote; Microsoft's guidance page wasn't fetched here, **UNVERIFIED** word for word.)
 - **For this desk:** top-centre of the bezel, flush with the screen, facing you. Not facing a lamp (the 3,000–13,000 lux readings on 2026-10-11 were the sensor seeing a light source), not the ceiling, and not behind the monitor (that's the right place for a bias-light sensor).
-- **Check self-illumination:** at night with the lights off, compare the lux with a black screen and with a white screen. If white reads much higher, the screen is lighting the sensor (light reflected off you and the room), which can push brightness up. The slow darkening filter already damps this; a large difference would need correcting.
+- **Check self-illumination:** at night with the lights off, compare the lux with a black screen and with a white screen. If white reads much higher, the screen is lighting the sensor (light reflected off you and the room), which can push brightness up. The slow darkening filter already damps this; a large difference would need correcting. `probe/08-brightness.sh` Part B does this check and prints the verdict (negligible if white − black is under 20% of the black reading).
 
 ## Assumptions
 
 | Assumption | If wrong |
 |---|---|
-| KitGuru's unit behaves like this one | The % values shift; measure with the TSL2591 against a white screen (relative brightness at 0, 25, 50, 75, 100) |
+| KitGuru's unit behaves like this one | The % values shift; run `probe/08-brightness.sh` (Part A: relative brightness at 0, 10, … 100 against a white screen; it prints a corrected `BRIGHTNESS_CURVE`) |
 | Research done mostly with young adults applies to you | Preference may differ; the soak and nudges will show it |
 | Content is mostly light-mode | Dark-mode content needs less; the curve may feel bright less often |
 | The sensor will sit in the screen plane facing you | Lux readings change with placement, so the curve's lux values won't mean the same light levels |

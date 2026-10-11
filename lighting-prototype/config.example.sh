@@ -35,15 +35,22 @@ WAKE_DELAY=8                      # after a wake, wait this long before touching
 
 # ── Brightness (m1ddc backend only; with Lunar, Lunar's own curve is used) ─
 # lux:brightness% pairs, interpolated linearly in log10(lux).
-BRIGHTNESS_CURVE="0:10,10:20,40:35,100:50,300:70,1000:100"
-BRIGHTNESS_MIN=5
+# From docs/lighting-app/RESEARCH_07_BRIGHTNESS_CURVE.md: research luminance targets
+# (20 cd/m2 in the dark up to the maximum at 2000 lux), inverted through KitGuru's
+# colorimeter table for this monitor. UNVERIFIED on your unit: probe/08-brightness.sh checks it.
+BRIGHTNESS_CURVE="0:0,10:0,50:1,100:7,200:17,300:22,500:31,1000:76,2000:100"
+# 0, not 5: the hardware floor is already ~55 cd/m2 at 0%, and a floor of 5 would hold it at ~71.
+BRIGHTNESS_MIN=0
 BRIGHTNESS_MAX=100
 BRIGHTNESS_DEADBAND=2             # DDC units
 BRIGHTNESS_MIN_INTERVAL=60        # seconds between adaptive brightness writes (conservative)
 BRIGHTNESS_DAILY_CAP=200          # hard fuse: adaptive brightness stops for the day after this
 USER_MIN_GAP_MS=250               # user actions (nudges, override, presets): at most 4 writes/s per control
 OFFSET_RESET_DECADES=0.5          # a brighter/dimmer nudge is dropped when lux moves ~3× away
-LUMINANCE_COMPENSATION=1          # raise backlight to offset the dimming from warm gains
+# 1 = raise the backlight to offset the dimming from warm gains. Off by default: it only acts
+# when the white point is warm, which is in dim light, where the goal is LESS light
+# (RESEARCH_07 section 3). Set to 1 to turn it back on.
+LUMINANCE_COMPENSATION=0
 
 # ── White point ────────────────────────────────────────────────────────────
 KELVIN_DIM_LUX=10
@@ -76,9 +83,11 @@ CRITICAL_BRIGHTNESS=40            # freeze backlight here; empty = leave brightn
 
 # ── Bias light (Govee LAN) ─────────────────────────────────────────────────
 GOVEE_IPS=""                      # space-separated, e.g. "192.168.1.60 192.168.1.61"
-MONITOR_NITS_MIN=40               # AOC CU34G4Z: measure or take from the spec sheet
-MONITOR_NITS_MAX=350
-BIAS_K=0.028                      # strip % per screen nit: a starting guess (350 nits → 10%). Calibrate by eye
+# AOC CU34G4Z, white luminance at default gains: KitGuru's colorimeter review measured
+# 55.2 cd/m2 at 0% and 371.6 at 100% (RESEARCH_07 section 2). One unit, not yours.
+MONITOR_NITS_MIN=55
+MONITOR_NITS_MAX=372
+BIAS_K=0.028                      # strip % per screen nit: a starting guess (372 nits → 0.028 × 372 ≈ 10.4%). Calibrate by eye
 BIAS_MIN=1
 BIAS_MAX=40
 BIAS_REFRESH=60                   # resend the current state this often (UDP has no ack)

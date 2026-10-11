@@ -18,7 +18,7 @@ Status: 2026-09-27. Generated from BUILD_PLAN, SPEC, TEST_PLAN and RESEARCH_06. 
 
 A type like "Backend / Frontend" means both; the first one is the main kind of work.
 
-- **Source:** `BUILD_PLAN` tasks keep their IDs and hours. Tasks marked **new** (DS-, PM-, QA-, DV-, P0-T03b) weren't in BUILD_PLAN. The docs implied them: R06's design spec, SPEC's open decisions, TEST_PLAN's manual checks. Their hours are my estimates, on the same basis as BUILD_PLAN's.
+- **Source:** `BUILD_PLAN` tasks keep their IDs and hours. Tasks marked **new** (DS-, PM-, QA-, DV-, P0-T03b, P0-T12, P0-T13) weren't in BUILD_PLAN. The docs implied them: R06's design spec, SPEC's open decisions, TEST_PLAN's manual checks. Their hours are my estimates, on the same basis as BUILD_PLAN's.
 - **Hours** are ranges for you learning Swift with AI pair-programming (BUILD_PLAN, "How to read the estimates").
 - **Everyone is you.** One person holds every role, so the types are for planning your weeks (a design day, a hardware evening), not for handing work to other people.
 
@@ -26,14 +26,14 @@ A type like "Backend / Frontend" means both; the first one is the main kind of w
 
 | Type | Core tasks (Phases 0–6) | Core hours | Optional hours |
 |---|---|---|---|
-| Hardware | 6 | 2.75–5.5 | 1.5–5 |
+| Hardware | 6 | 2.75–5.5 | 2–6 |
 | Backend | 24 | 59–146 | 4–10 |
 | DevOps | 4 | 4–13 | 3–9 |
 | Frontend | 6 | 10–24 | 10–24 |
 | QA | 6 | 9.5–14.5 | — |
-| Product | 7 | 3.25–6.5 | — |
+| Product | 8 | 3.5–6.75 | — |
 | Design | 6 | 8–18 | 3–7 |
-| **All** | **59** | **96.5–227.5** | 21.5–55 |
+| **All** | **60** | **96.75–227.75** | 22–56 |
 
 - **Phases 1–6 (the native app):** about 87–210 h. BUILD_PLAN's tasks alone are 72–179 h; the extra 16–31 h is the design, QA and decision work that BUILD_PLAN left implicit.
 - **Backend is most of the work, and nearly all the risk:** the three "genuinely hard" app tasks (P4-T02, P4-T03, P5-T02) are all Backend.
@@ -70,6 +70,8 @@ That's 36–86 h of hands-on work end to end (computed from the dependencies), p
 | P0-T07 | If blocked: Terminal session or launchd daemon workaround | DevOps | launchd, possibly root | P0-T06 | lightd runs unattended across logout/login | 2–6 | genuinely hard | Only if P0-T06 fails |
 | P0-T08 | SwiftBar item + override Shortcut with a hotkey | Frontend (shell UI) | SwiftBar, Shortcuts app | P0-T06 (or P0-T07) | Override toggles from menu bar and hotkey in < 2 s | 1–2 | routine | To do |
 | P0-T11 | One-week soak of the shell system | QA | The daily soak checklist (TEST_PLAN §5) | P0-T05, P0-T06, P0-T08 | 7 days logged | 1.75 | routine | To do |
+| P0-T12 *(new)* | Apply the research brightness curve to ~/.lighting/config.sh | Product / Backend (config) | RESEARCH_07 §3, the config file | P0-T05 | Curve, BRIGHTNESS_MIN=0, LUMINANCE_COMPENSATION=0 and MONITOR_NITS 55/372 in config.sh; lightd restarted; sensor on the top bezel | 0.25 | routine | To do |
+| P0-T13 *(new)* | Probe 08: brightness response + self-illumination (Q16) | Hardware | Dark room; sensor on the screen (Part A), then at the bezel (Part B) | P0-T12 | RESULT Q16a (curve matches KitGuru, or a measured BRIGHTNESS_CURVE) and RESULT Q16b (negligible or significant) | 0.5–1 | routine | Optional |
 | PM-01 *(new)* | Set weekly hours (Q15); re-baseline the schedule | Product | Your calendar | — | BUILD_PLAN totals converted to dates | 0.5–1 | routine | To do |
 | PM-02 *(new)* | Decide the darkening-latency target (NFR-02: accept ~210 s or faster TAU_DOWN) | Product | SPEC NFR-02 | — | NFR-02 and US-1 AC1 updated | 0.25–0.5 | routine | To do |
 | PM-03 *(new)* | Close SPEC open questions as probes report (Q1–Q6, Q8, Q9, Q12, Q14) | Product | Probe results | P0-T01…P0-T09 | SPEC §7 has an answer or a blocker for each | 0.5–1 | routine | To do |

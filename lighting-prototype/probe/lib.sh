@@ -160,3 +160,25 @@ show_patch() {  # show_patch <css colour>
     printf '<!doctype html><html><body style="margin:0;background:%s;cursor:none"></body></html>' "$1" > "$f"
     open -a Safari "$f"
 }
+
+# ── Shared by the probes that show a white patch and read the sensor (05, 08).
+# They expect $OUT (the results file name), $PATCH_PID (the white window's PID) and
+# $SENSOR_URL to be set by the probe.
+
+# Stop cleanly if the white window was closed (a click on it = abort): every later
+# reading would measure the desktop, and the analysis would still print a verdict.
+patch_check() {
+    if [ -n "$PATCH_PID" ] && ! kill -0 "$PATCH_PID" 2>/dev/null; then
+        PATCH_PID=""
+        record $OUT "ABORTED: the white screen was closed, so no result. Rerun when ready."
+        exit 1
+    fi
+}
+NANS=0
+nan_check() {  # nan_check <value>: two failed readings in a row = the sensor is gone
+    case "$1" in nan*) NANS=$(( NANS + 1 )) ;; *) NANS=0 ;; esac
+    if [ $NANS -ge 2 ]; then
+        record $OUT "ABORTED: no readings from the sensor ($SENSOR_URL). Check it's powered and on Wi-Fi, then rerun."
+        exit 1
+    fi
+}

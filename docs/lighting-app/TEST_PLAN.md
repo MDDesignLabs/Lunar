@@ -3,7 +3,7 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **97 checks, all passing**, against simulators (2026-09-26, after two rounds of review fixes; 63 before). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 96. Every check added in those rounds was confirmed by reintroducing the bug it targets in a copy and seeing the suite fail. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
+- `lighting-prototype/test/run_tests.sh`: **109 checks, all passing**, against simulators (2026-10-11, after the RESEARCH_07 defaults and probe 08: 97 before, 63 before the 2026-09-26 review fixes). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 108. The full run takes about 4 minutes. Every check added in those rounds was confirmed by reintroducing the bug it targets in a copy and seeing the suite fail. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
   - a fake Govee strip on real UDP sockets (`test/fake_govee.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
@@ -68,7 +68,9 @@ Only some of these have a shell check today (marked "shell §N"). The rest are s
 | U-L01 | Compensation on, 5000 K row | Brightness rises (shell §1: 20 → 22 with `GAIN_GAMMA` 1.0, the default until probe 05; 23 with 2.2) |
 | U-L02 | Compensation with the gains actually on the monitor (a deferred set) | No boost for gains not yet written (shell §1, §9) |
 | U-A01 | Probe 05 analysis on synthetic data with 3% noise | Right verdict for exponents 1.0 and 2.2; no false "headroom" (shell §1) |
-| U-B07 | Brightness clamp | Curve values outside [`BRIGHTNESS_MIN`, `BRIGHTNESS_MAX`] are clamped (shell §1) |
+| U-B07 | Brightness clamp | Curve values outside [`BRIGHTNESS_MIN`, `BRIGHTNESS_MAX`] are clamped (shell §1; sets `BRIGHTNESS_MIN=5` explicitly since the default is now 0) |
+| U-B08 | Example config defaults (RESEARCH_07) | 0.5 lux → brightness 0; 300 lux → 22 (shell §1). Added 2026-10-11. The compensation checks (U-L01, U-L02) now set `LUMINANCE_COMPENSATION=1` and the old seed curve explicitly, because the defaults are now 0 and a curve that is 0 in a dim room |
+| U-A02 | Probe 08 analysis (via the simulated runs I-P01–I-P05) | Match verdict, recommended curve, drift and self-illumination verdict, on simulated data only |
 
 ---
 
@@ -112,6 +114,18 @@ Only some of these have a shell check today (marked "shell §N"). The rest are s
 | I-S05 | Bufferless delivery | Each sample arrives within 1 s of being sent (the awk buffering bug found earlier) |
 | I-S06 | Negative or non-numeric samples (Lunar's −1 without Pro) | Discarded, not read as darkness (shell §9) |
 
+### Probe 08 against simulators (shell §7, added 2026-10-11)
+
+The fake sensor follows KitGuru's brightness table (opt-in: `FAKE_BRIGHTNESS=1`). `FAKE_BEZEL=1` plus `FAKE_SELF=<fraction>` model a sensor at the bezel that the screen lights.
+
+| ID | Case | Expected |
+|---|---|---|
+| I-P01 | Part A against a monitor that follows KitGuru's table | `RESULT Q16a: MATCHES`; the printed `BRIGHTNESS_CURVE` equals RESEARCH_07's; drift check OK |
+| I-P02 | Baseline after Part A | Gains 50/47/44 and brightness 60 restored, not 50 or the last step |
+| I-P03 | Write count | Part A: 23 (19 + 4 restore). Both parts: 30 (19 + 7 + 4 restore), as in the probe's header |
+| I-P04 | White screen closed during Part A | `ABORTED`, no `RESULT Q16a`, baseline restored (same as M-14 for probe 05) |
+| I-P05 | Part B, no self-illumination / screen adds light to the sensor | `negligible` / `significant` with the advice; baseline restored |
+
 ### Govee (P8)
 
 | ID | Case | Expected |
@@ -134,6 +148,7 @@ Only some of these have a shell check today (marked "shell §N"). The rest are s
 | 05 gain domain | Q3, Q4, Q10 | FR-21 table, FR-12 `GAIN_GAMMA`, US-2 |
 | 06 Part A | Q5 | FR-50/51 (is reapply-after-wake needed?) |
 | 07 Govee | Q7 | FR-60/61 |
+| 08 brightness (optional) | Q16 (a: does the unit follow KitGuru's table, b: does the screen light the sensor) | FR-10 curve (RESEARCH_07) |
 | install + log | Q8 | NFR-07 |
 
 ---
@@ -157,7 +172,7 @@ Run it before each phase gate. Record pass/fail and write counts.
 | M-11 | Open BetterDisplay while the app runs | Writes stop; "Paused: BetterDisplay"; resume after quitting it |
 | M-12 | `kill -9` the app while it's warm | After relaunch, neutral first (FR-45) |
 | M-13 | Sensor facing a lamp (saturation) | Values filtered; no wild jumps (firmware drops 65535) |
-| M-14 | Click the white screen during probe 05 | Probe stops with "ABORTED", restores the monitor, prints no verdict |
+| M-14 | Click the white screen during probe 05 or 08 | Probe stops with "ABORTED", restores the monitor, prints no verdict |
 | M-15 | Switch the room from ~300 to ~30 lux and back, timing each | Brightening within 3 units of target in ≤ 90 s; darkening per the NFR-02 decision |
 
 ---
@@ -197,7 +212,7 @@ Run it before each phase gate. Record pass/fail and write counts.
 | FR-02 | — | I-S02 | M-06, M-07 |
 | FR-03 | U-F01–F05 | — | soak, M-13 |
 | FR-04 | — | I-S06 | — |
-| FR-10 | U-B01–B07 | — | soak |
+| FR-10 | U-B01–B08 | — | probe 08, soak |
 | FR-11 | U-N01–N04 | — | soak |
 | FR-12 | U-L01, U-L02 | — | probe 05 (`GAIN_GAMMA`) |
 | FR-20 | U-K01–K03 | — | soak |

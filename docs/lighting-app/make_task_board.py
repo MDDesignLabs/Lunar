@@ -25,6 +25,8 @@ t("P0-T06","0","Install lightd; test Local Network as an agent (Q8)","DevOps","`
 t("P0-T07","0","If blocked: Terminal session or launchd daemon workaround","DevOps","launchd, possibly root","P0-T06","lightd runs unattended across logout/login",2,6,GH,"Only if P0-T06 fails",BP)
 t("P0-T08","0","SwiftBar item + override Shortcut with a hotkey","Frontend (shell UI)","SwiftBar, Shortcuts app","P0-T06 (or P0-T07)","Override toggles from menu bar and hotkey in < 2 s",1,2,R,"To do",BP)
 t("P0-T11","0","One-week soak of the shell system","QA","The daily soak checklist (TEST_PLAN §5)","P0-T05, P0-T06, P0-T08","7 days logged",1.75,1.75,R,"To do",BP)
+t("P0-T12","0","Apply the research brightness curve to ~/.lighting/config.sh","Product / Backend (config)","RESEARCH_07 §3, the config file","P0-T05","Curve, BRIGHTNESS_MIN=0, LUMINANCE_COMPENSATION=0 and MONITOR_NITS 55/372 in config.sh; lightd restarted; sensor on the top bezel",0.25,0.25,R,"To do",NEW)
+t("P0-T13","0","Probe 08: brightness response + self-illumination (Q16)","Hardware","Dark room; sensor on the screen (Part A), then at the bezel (Part B)","P0-T12","RESULT Q16a (curve matches KitGuru, or a measured BRIGHTNESS_CURVE) and RESULT Q16b (negligible or significant)",0.5,1,R,"Optional",NEW)
 t("PM-01","0","Set weekly hours (Q15); re-baseline the schedule","Product","Your calendar","—","BUILD_PLAN totals converted to dates",0.5,1,R,"To do",NEW)
 t("PM-02","0","Decide the darkening-latency target (NFR-02: accept ~210 s or faster TAU_DOWN)","Product","SPEC NFR-02","—","NFR-02 and US-1 AC1 updated",0.25,0.5,R,"To do",NEW)
 t("PM-03","0","Close SPEC open questions as probes report (Q1–Q6, Q8, Q9, Q12, Q14)","Product","Probe results","P0-T01…P0-T09","SPEC §7 has an answer or a blocker for each",0.5,1,R,"To do",NEW)
@@ -149,7 +151,7 @@ L.append("| **Hardware** | Probes on the real Mac, monitor and sensor; ESP32 fir
 L.append("| **DevOps** | Xcode project, signing, launch at login, launchd, CI |")
 L.append("| **QA** | Manual checks and soak weeks on real hardware (automated tests live inside each Backend task's \"done when\") |\n")
 L.append("A type like \"Backend / Frontend\" means both; the first one is the main kind of work.\n")
-L.append("- **Source:** `BUILD_PLAN` tasks keep their IDs and hours. Tasks marked **new** (DS-, PM-, QA-, DV-, P0-T03b) weren't in BUILD_PLAN. The docs implied them: R06's design spec, SPEC's open decisions, TEST_PLAN's manual checks. Their hours are my estimates, on the same basis as BUILD_PLAN's.")
+L.append("- **Source:** `BUILD_PLAN` tasks keep their IDs and hours. Tasks marked **new** (DS-, PM-, QA-, DV-, P0-T03b, P0-T12, P0-T13) weren't in BUILD_PLAN. The docs implied them: R06's design spec, SPEC's open decisions, TEST_PLAN's manual checks. Their hours are my estimates, on the same basis as BUILD_PLAN's.")
 L.append("- **Hours** are ranges for you learning Swift with AI pair-programming (BUILD_PLAN, \"How to read the estimates\").")
 L.append("- **Everyone is you.** One person holds every role, so the types are for planning your weeks (a design day, a hardware evening), not for handing work to other people.\n")
 
