@@ -199,7 +199,7 @@ Each question has the probe or decision that closes it.
 | Q5 | Do sleep, input switching or power-off reset the gains? | probe 06 Part A | Open |
 | Q6 | Is the ESP32 stream stable for 24 h? | probe 02 | Open |
 | Q7 | Govee model, Kelvin range, protocol match | probe 07 | Deferred (no hardware) |
-| Q8 | Can a launchd agent reach `lunarsensor.local`? | `./install.sh`, then check `lightd.log` [R04 §2] | Open. **TN3179 says agents aren't exempt** |
+| Q8 | Can a launchd agent reach `lunarsensor.local`? | `./install.sh`, then check lux updates under launchd [R04 §2] | **Answered 2026-10-11: yes, on your Mac.** The launchd agent (`state = running`, pid matching the lightd process) received live lux, which changed when the sensor was covered. This contradicts the expectation from TN3179 (agents aren't exempt); why it's allowed is UNVERIFIED. Still to confirm: it also works after a reboot, with no Terminal session involved |
 | Q9 | Mac Studio generation and AOC port (HDMI vs USB-C) | `system_profiler SPHardwareDataType`; the physical port; `m1ddc display list detailed` | Open. **Decides the DDC transport** [R02 §1.3] |
 | Q10 | Does `whitepatch.swift` compile and stay on top? | probe 05 rerun | Probably yes: the rerun completed with stable per-channel readings, which needs the white patch to stay up. Not confirmed |
 | Q11 | Is 50/50/50 truly D65 on this panel? | colorimeter, or accept | Open. Default: accept |

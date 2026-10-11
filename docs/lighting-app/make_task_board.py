@@ -21,7 +21,7 @@ t("P0-T04","0","Probe 06 Part A: what resets gains (Q5)","Hardware","Mac, monito
 t("P0-T09","0","Probe 02: 24 h sensor log (Q6), Lunar quit","Hardware","ESP32 powered, Mac awake 24 h","—","RESULT Q6; lux CSV saved",0.5,0.5,R,"To do",BP)
 t("P0-T10","0","Optional: reflash ESP32 with `power_save_mode: none` (Q12)","Hardware (firmware)","ESPHome toolchain, USB cable","P0-T09","Second probe 02 compared with the first",1,4,NR,"Optional",BP)
 t("P0-T05","0","Write `~/.lighting/config.sh` from the results","Backend (config)","Probe results","P0-T01, P0-T02, P0-T03b, P0-T04","Every value has a comment saying where it came from",1,2,R,"To do",BP)
-t("P0-T06","0","Install lightd; test Local Network as an agent (Q8)","DevOps","`./install.sh`, launchd","P0-T05, P0-T09","Lux updating under launchd for 1 h, or Q8 marked blocked with evidence",0.5,2,NR,"Installed 2026-10-11; sensor check pending",BP)
+t("P0-T06","0","Install lightd; test Local Network as an agent (Q8)","DevOps","`./install.sh`, launchd","P0-T05, P0-T09","Lux updating under launchd for 1 h, or Q8 marked blocked with evidence",0.5,2,NR,"Done 2026-10-11: agent reads the sensor; reboot check pending",BP)
 t("P0-T07","0","If blocked: Terminal session or launchd daemon workaround","DevOps","launchd, possibly root","P0-T06","lightd runs unattended across logout/login",2,6,GH,"Only if P0-T06 fails",BP)
 t("P0-T08","0","SwiftBar item + override Shortcut with a hotkey","Frontend (shell UI)","SwiftBar, Shortcuts app","P0-T06 (or P0-T07)","Override toggles from menu bar and hotkey in < 2 s",1,2,R,"To do",BP)
 t("P0-T11","0","One-week soak of the shell system","QA","The daily soak checklist (TEST_PLAN §5)","P0-T05, P0-T06, P0-T08","7 days logged",1.75,1.75,R,"To do",BP)

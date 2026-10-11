@@ -52,6 +52,7 @@ Consequences:
    - [tn3179]: for an agent not installed via `SMAppService`, set `AssociatedBundleIdentifiers` in the launchd plist so macOS knows which app is responsible.
    - [tn3179]: "macOS fails to display the local network alert when a process with a very short lifespan performs a local network operation (FB16131937)".
    - UNVERIFIED what actually happens to a bash-script agent with no bundle on macOS 26.7. It may be blocked with no prompt. *Settles it:* after `./install.sh`, check `~/.lighting/lightd.log` for "sensor: no data" while `curl` works from Terminal.
+   - **Measured 2026-10-11 (contradiction kept visible):** on your Mac (macOS 26.7) the agent **is not blocked**. Installed by `./install.sh`, it ran under launchd and received live lux from `lunarsensor.local`. Why macOS allows it, when TN3179 says agents aren't exempt, is UNVERIFIED: a grant from earlier Terminal runs, or a system-wide allowance, are both plausible. It hasn't been tested after a reboot yet. It could also change with a macOS update, so keep the "sensor: no data" check in mind if lux ever stops.
 3. **Workarounds for the shell phase**, least bad first:
    - (a) Run `lightd` from a Terminal window, which is exempt. Clunky, but provably allowed.
    - (b) Run it as a launchd **daemon**, which is exempt, as root.
@@ -116,5 +117,5 @@ LightingApp (SwiftUI App, LSUIElement)
 |---|---|
 | macOS 14+ only | If you ever need macOS 13, replace Observation with `ObservableObject`. About a day's work |
 | One process can do DDC and networking under one Local Network grant | If the grant resets per build, every rebuild re-prompts. Irritating, not blocking. TN3179 says ad-hoc signing causes exactly this; a stable signing identity avoids it (§4) |
-| The shell `lightd` can't reliably reach the sensor as a launchd agent | If it can, the shell phase can run unattended and the case for the app weakens. Test first (SPEC Q8) |
+| The shell `lightd` can't reliably reach the sensor as a launchd agent | **Wrong, as measured on 2026-10-11:** it can. The shell phase can run unattended, and this reason for building the app falls away. The app's remaining case is the UI, the system events (real sleep/wake notifications instead of gap detection) and the learning experience, not a network workaround |
 | DDC works from a non-root GUI app | That's how MonitorControl and m1ddc run; `m1ddc` ran fine as your user in probe 00 |

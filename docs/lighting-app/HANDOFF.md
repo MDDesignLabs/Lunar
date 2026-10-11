@@ -84,7 +84,7 @@ From `bin/light writes`, `lightd.log` and `pgrep` that the user pasted:
 - **Fixed after this run:**
   - a restart left gains neutral for up to 10 min, because the exit's neutral write started the gain interval. The first apply after start is now forced, like a wake;
   - a brightness write deferred by the interval wasn't retried once lux stopped moving. This log didn't hit it, because lux kept changing.
-- **Not tested yet:** running under launchd (Q8). This run was from Terminal.
+- **Running under launchd (Q8): works.** After `./install.sh`, the agent (pid matching `launchctl print`) received live lux that changed when the sensor was covered. That's against TN3179's expectation for agents; the reason is UNVERIFIED. Still to do: confirm after a reboot with nothing started by hand (`bin/light status` shows current lux and sensible `last sent`).
 
 ## Review fixes (2026-09-26) that change the hardware steps
 
