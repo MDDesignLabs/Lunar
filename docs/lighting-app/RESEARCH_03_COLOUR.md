@@ -66,7 +66,34 @@ The Swift port must pass the same two cases (TEST_PLAN U-C01, U-C02).
 
 Your table matches the gamma-encoded column almost exactly, so it was derived assuming encoded-domain gains.
 
-**Measurement status: still open.**
+**Measurement status: answered by the second run (2026-10-11), with a caveat.**
+
+The run's numbers (`probe/results/05-gain-*`; re-analysed here with the fixed `analyze_gain.py`, same result):
+
+| | Red | Green | Blue |
+|---|---|---|---|
+| Signal at gain 50, above the black floor | 44.1 lux | 57.4 lux | 16.4 lux |
+| Output at gain 40 (linear predicts 0.800, encoded 0.612) | 0.743 | 0.750 | 0.682 |
+| Power-law exponent | 1.27 | 1.22 | 1.22 |
+| Straight-line fit: output reaches zero at gain | 5.5 | 4.9 | 3.7 |
+| Worst misfit of that line | 2.6% | 1.9% | 6.6% |
+| Output at 55 / 60 vs 50 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 |
+
+- **Q3: the gains act in linear light, with a small offset.** Each channel is a straight line that reaches zero at gain ~4–5, not 0. A power curve fitted to that line gives ~1.2, which is why the probe reports exponent 1.23. It's nowhere near the gamma-encoded 2.2.
+- **Q4: no headroom.** 55 and 60 give exactly the same output as 50, so 50 is the ceiling. Neutral is the brightest each channel can go, which matches the design rule "never above neutral".
+- **Your original table was too weak, as the linear-light column above predicted.** Measured: "5000K" 50/46/40 → ≈ 5290 K; "4500K" 50/44/36 → ≈ 5090 K.
+- **Corrected table** (inverts the measured points, so the offset is accounted for):
+  `6500:50:50:50, 6000:50:48:47, 5500:50:46:43, 5000:50:43:35, 4500:50:40:27, 4000:50:37:21`, with `GAIN_GAMMA=1.23`, which is only used for luminance compensation.
+- **Caveat, kept visible:** the room wasn't dark. The black screen read ~102 lux and full white ~220 lux, so white was only ~2.2× black, short of the preflight's 5× rule. The local session skipped that gate, reasoning that the per-channel signals were stable and added up to white. Checked here:
+  - the floor held within ±0.3% across the run;
+  - the repeated gain-50 references agree within 0.6%;
+  - modelling the sensor's lux formula, `(F − I)(1 − I/F)`, with a floor this large shows it can bend a truly linear response only to an apparent ~1.03, not 1.23;
+  - the readings stayed inside a narrow band (102–160 lux), so an automatic gain-range switch mid-run is unlikely.
+
+  So the shape of the result holds. Blue is the least certain channel, because its signal was only 16% of the floor (6.6% misfit). A darker rerun would tighten blue; it wouldn't change the verdict.
+- **Still assumed:** sRGB primaries and 50/50/50 = D65 (§4, Q11). The Kelvin labels are approximate; the linear-vs-encoded verdict doesn't depend on them.
+
+**History: the first run.**
 - The first hardware run of probe 05 (2026-09-26) is **invalid**. Every channel stayed at the ambient floor (~2.6 lux), whatever the gain.
 - Cause: the probe told you to make Safari full screen, then press Enter in Terminal, which moved the monitor off Safari's full-screen Space.
 - Fixed in commit `ca02c06`:

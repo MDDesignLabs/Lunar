@@ -80,7 +80,7 @@ From `bin/light writes`, `lightd.log` and `pgrep` that the user pasted:
   - neutral gains on exit (FR-45).
 - **m1ddc write time:** 65–81 ms per write, with stock double send. That puts the three-gain override at about 0.4 s including the 100 ms gaps, well inside NFR-01's 2 s.
 - **One lightd only.** `pgrep` shows three `bin/lightd` processes, but they're one lightd and its stream helpers: the main loop, the stream subshell and the `while read` subshell.
-- **The colour table in use (5000 K = 50/43/35)** isn't the example table's, so probe 05's results appear to be in the config. Still to paste: the probe 05 output.
+- **Probe 05 (second run) is in, and was re-analysed with the fixed script, giving the same result.** The gains act in linear light with a small offset (exponent 1.23), and there's no headroom above 50. Corrected table: `GAIN_TABLE="6500:50:50:50,6000:50:48:47,5500:50:46:43,5000:50:43:35,4500:50:40:27,4000:50:37:21"`, with `GAIN_GAMMA=1.23`. The room wasn't dark (white ≈ 2.2× black, so the preflight was skipped), but the verdict was checked to hold (RESEARCH_03 §2). Blue is the least certain channel; a darker rerun would tighten it.
 - **Fixed after this run:**
   - a restart left gains neutral for up to 10 min, because the exit's neutral write started the gain interval. The first apply after start is now forced, like a wake;
   - a brightness write deferred by the interval wasn't retried once lux stopped moving. This log didn't hit it, because lux kept changing.

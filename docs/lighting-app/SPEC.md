@@ -194,14 +194,14 @@ Each question has the probe or decision that closes it.
 |---|---|---|---|
 | Q1 | Does the AOC need every write sent twice? | probe 04 | Run; **result not reported here** |
 | Q2 | Do DDC reads match the OSD? | probe 03 | Run; **result not reported here** |
-| Q3 | Are gains linear-light or gamma-encoded? | probe 05 (rerun) | Open. First run invalid (R03 §2) |
-| Q4 | Is there headroom above gain 50? | probe 05 | Open |
+| Q3 | Are gains linear-light or gamma-encoded? | probe 05 (rerun) | **Answered 2026-10-11: linear light, with a small offset** (zero output at gain ~4–5; fitted exponent 1.23). The room wasn't dark (white ≈ 2.2× black); the verdict was checked to hold anyway (R03 §2) |
+| Q4 | Is there headroom above gain 50? | probe 05 | **Answered 2026-10-11: no.** 55 and 60 equal 50 on every channel |
 | Q5 | Do sleep, input switching or power-off reset the gains? | probe 06 Part A | Open |
 | Q6 | Is the ESP32 stream stable for 24 h? | probe 02 | Open |
 | Q7 | Govee model, Kelvin range, protocol match | probe 07 | Deferred (no hardware) |
 | Q8 | Can a launchd agent reach `lunarsensor.local`? | `./install.sh`, then check `lightd.log` [R04 §2] | Open. **TN3179 says agents aren't exempt** |
 | Q9 | Mac Studio generation and AOC port (HDMI vs USB-C) | `system_profiler SPHardwareDataType`; the physical port; `m1ddc display list detailed` | Open. **Decides the DDC transport** [R02 §1.3] |
-| Q10 | Does `whitepatch.swift` compile and stay on top? | probe 05 rerun | Open |
+| Q10 | Does `whitepatch.swift` compile and stay on top? | probe 05 rerun | Probably yes: the rerun completed with stable per-channel readings, which needs the white patch to stay up. Not confirmed |
 | Q11 | Is 50/50/50 truly D65 on this panel? | colorimeter, or accept | Open. Default: accept |
 | Q12 | Does `power_save_mode: none` fix the Wi-Fi loss? | probe 02 before and after reflashing | Open |
 | Q13 | How bright should the bias light be? | decision: calibrate by eye (R05 §2) | Decided, pending hardware |
