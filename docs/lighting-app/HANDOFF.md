@@ -105,4 +105,4 @@ Six review agents checked the code, probes, tests and docs. Every finding and it
     - what to watch over the next week
     - a go/no-go on the Swift v1, and on buying Lunar Pro
 
-Tests: `lighting-prototype/test/run_tests.sh` (95 checks, all passing (94 plus one SKIP on a machine with no multicast route), simulators only) runs anywhere, in about 3 minutes. Since 2026-09-26 it writes only to a temp folder: it no longer touches `probe/results/`, so running it after a probe is safe. (Before that fix it deleted that folder. If you ran the tests after a probe with an older checkout, check the results are still there.)
+Tests: `lighting-prototype/test/run_tests.sh` (96 checks, all passing (95 plus one SKIP on a machine with no multicast route), simulators only) runs anywhere, in about 3 minutes. Since 2026-09-26 it writes only to a temp folder: it no longer touches `probe/results/`, so running it after a probe is safe. (Before that fix it deleted that folder. If you ran the tests after a probe with an older checkout, check the results are still there.)

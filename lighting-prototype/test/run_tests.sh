@@ -358,6 +358,13 @@ kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
 check "a gain set deferred by the interval is applied later, though lux has stopped moving" \
     "grep -q 'set blue 40' $MOCK_DIR/calls.log"
 
+fresh "GOVEE_IPS= BRIGHTNESS_MIN_INTERVAL=4 TAU_UP=1 SENSOR_URL=http://127.0.0.1:18088/events"
+python3 test/fake_sensor.py 18088 0.2 5 5 5 5 5 1000 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 7
+kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+check "a brightness write deferred by the interval is applied later, though lux has stopped moving" \
+    "[ \$(cat $LIGHT_HOME/state/last_brightness) = 100 ]" "last brightness=$(cat $LIGHT_HOME/state/last_brightness 2>/dev/null)"
+
 fresh "GOVEE_IPS= KELVIN_MIN_INTERVAL=3600 NEUTRAL_ON_EXIT=0 SENSOR_URL=http://127.0.0.1:18099/events"   # sensor offline; no neutral-on-exit, so only the start path can write
 . lib/common.sh
 state_set mode critical; state_set running 0; state_set last_red 50; state_set last_green 46; state_set last_blue 40

@@ -18,7 +18,7 @@ Status: draft, 2026-09-26. Evidence tags point to the research files (R01–R06)
   3. Nothing adapts the white point, and colour-critical work needs a guaranteed-neutral state at one click.
 
 **What exists today:**
-- A shell prototype that does all of this, tested against simulators (95 checks after the 2026-09-26 review fixes), with no hardware calibration yet.
+- A shell prototype that does all of this, tested against simulators (96 checks after the review fixes), with no hardware calibration yet.
 - Probe results from your Mac:
   - probe 00: m1ddc builds and sees the CU34G4Z; the display-sleep helper works;
   - probes 03 and 04 ran, but their results haven't reached this document;

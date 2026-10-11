@@ -144,10 +144,12 @@ while true; do
         moved="$(awk -v a="$prev_lf" -v b="$acted_lf" -v d="$LUX_DEADBAND" \
             'BEGIN { x = a - b; if (x < 0) x = -x; print (b == "" || x >= d) ? 1 : 0 }')"
 
-        # Also retry: a gain set deferred by KELVIN_MIN_INTERVAL, and an override that was
-        # blocked by another DDC app (rc 4; nothing is counted until it can be written).
+        # Also retry: a brightness write or gain set deferred by its minimum interval, and an
+        # override that was blocked by another DDC app (rc 4; nothing is counted until it can
+        # be written).
         retry=0
         [ "$mode" = adaptive ] && [ "$(state_get gains_pending 0)" = 1 ] && retry=1
+        [ "$mode" = adaptive ] && [ "$(state_get brightness_pending 0)" = 1 ] && retry=1
         [ "$mode" = critical ] && [ "$(state_get critical_rc 0)" = 4 ] && retry=1
 
         if [ "$moved" = 1 ] || [ "$force" = 1 ] || [ "$retry" = 1 ] || [ "$mode" != "$acted_mode" ]; then

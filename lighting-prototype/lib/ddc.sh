@@ -65,10 +65,12 @@ ddc_write() {
     last="$(state_get "last_$key" "")"
     last_t="$(state_get "last_t_$key" 0)"
 
-    if [ "$last" = "$value" ]; then return 2; fi
+    # "<key>_pending" remembers a write the interval held back, so lightd retries it
+    # once the interval has passed even if the room has stopped changing.
+    if [ "$last" = "$value" ]; then state_set "${key}_pending" 0; return 2; fi
     if [ "$force" != 1 ]; then
-        if [ -n "$last" ] && [ "$(absdiff "$value" "$last")" -lt "$deadband" ]; then return 2; fi
-        if [ $(( $(now) - last_t )) -lt "$interval" ]; then return 2; fi
+        if [ -n "$last" ] && [ "$(absdiff "$value" "$last")" -lt "$deadband" ]; then state_set "${key}_pending" 0; return 2; fi
+        if [ $(( $(now) - last_t )) -lt "$interval" ]; then state_set "${key}_pending" 1; return 2; fi
     fi
 
     # With BACKEND=lunar, Lunar itself is the bus owner, so only the others are refused.
@@ -110,6 +112,7 @@ ddc_write() {
     state_set "last_tms_$key" "$t1"
 
     if [ "$ok" = ok ]; then
+        state_set "${key}_pending" 0
         state_set "last_$key" "$value"
         state_set "last_t_$key" "$(now)"
         return 0
