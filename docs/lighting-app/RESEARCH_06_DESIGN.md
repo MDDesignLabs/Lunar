@@ -60,6 +60,10 @@ Corrected 2026-09-26: the MonitorControl row said "No ambient sensor, no colour 
 │  Brightness         44 %      [ − ] [ + ]   │  nudge ±5, shows offset when non-zero
 │  White point        auto      [Warm ▾]      │  temporary 6000/5500/5000/4500 until the room changes
 ├────────────────────────────────────────────┤
+│  Bias light   ◑ following · 5 250 K   [◯]   │  status row + on/off switch (added 2026-10-11, §3.1)
+│  Desk light   Room is dark. Turn it on?     │  only while a prompt is active (§3.2)
+│               [Turn on]  [Not tonight]      │
+├────────────────────────────────────────────┤
 │  DDC ok · writes today  B 12/200  G 3/30    │  health row, only in "details"
 │  Settings…                          Quit    │
 └────────────────────────────────────────────┘
@@ -75,6 +79,53 @@ Corrected 2026-09-26: the MonitorControl row said "No ambient sensor, no colour 
 | DDC blocked | Lunar, BetterDisplay or MonitorControl running [code: `lib/ddc.sh`] | "Paused: <App> is controlling the monitor" | "Show me" (brings that app forward). UNVERIFIED how |
 | Display asleep | `CGDisplayIsAsleep` [RESEARCH_02] | "Monitor asleep" | Read-only |
 | Cap reached | Daily cap hit | "Adaptive writes paused until tomorrow (safety cap)" | Override still works: it has a reserved allowance beyond the adaptive cap (FR-30). Corrected 2026-09-26: this said "it respects the cap too", which contradicted "still works" |
+
+The bias-light and desk-light states (2026-10-11) live in their own rows (§3.1, §3.2), not in the status line, so they never hide a monitor state.
+
+### 3.1 Bias light row (added 2026-10-11; SPEC US-7, FR-60–FR-67)
+
+One row under the white-point row; hidden when no Govee IP is configured. Each state has its own glyph **and** words; no colour-only cues.
+
+| State | Trigger | Row text | Control |
+|---|---|---|---|
+| Following | Adaptive, room below `BIAS_OFF_LUX` | "◑ Bias light · following · 5 250 K" | Switch on |
+| Colour-critical | Override on (FR-61) | "◐ Bias light · 6500 K (colour-critical)" | Switch on |
+| Off: room bright | Lux > `BIAS_OFF_LUX` (FR-64) | "○ Bias light · off, room is bright" | Switch on (it's automatic, not disabled) |
+| Off: monitor asleep | Display asleep | "○ Bias light · off, monitor asleep" | Read-only |
+| Off: by you | Switch turned off | "○ Bias light · off" | Switch off |
+| Not responding | 3 refreshes without a `devStatus` reply (FR-67) | "⚠ Bias light · not responding" | "Details" shows the IPs and last reply time |
+
+- The switch is "Bias light on/off", not the lamp itself: off means the app sends `turn 0` and stops driving the bars until you switch it on. Persisted.
+- With two lights (two IPs, SPEC Q17), the row shows one state; "Details" lists each. If only one replies, the row says "⚠ Bias light · 1 of 2 responding".
+- The level (5 cd/m²) is not shown; it's a calibration, not a control. Shown in "details" as "wall target 5 cd/m² · 6 %".
+
+### 3.2 Desk light bar prompt (added 2026-10-11; SPEC US-8, FR-80–FR-87)
+
+**The app never switches the bar by itself.** The prompt appears at most once per evening, after lux < 5 for 10 min (FR-81).
+
+**Notification** (`UNUserNotificationCenter`; a `UNNotificationCategory` with two `UNNotificationAction`s; interruption level `.passive`):
+- Title: **"Room is dark"**
+- Body (controllable model): **"Turn on the light bar? A little desk light can make the screen easier on your eyes."**
+- Body (remote-only model): **"Turn on the light bar with its remote? A little desk light can make the screen easier on your eyes."**
+- Actions: **"Turn on"**, **"Not tonight"**.
+- UNVERIFIED: macOS banners may show action buttons only on hover, and Focus can hide the notification. *Settles it:* a test notification. The popover row is the always-present fallback (FR-87).
+- Withdrawn with `removeDeliveredNotifications(withIdentifiers:)` when lux rises above 20 lx or the evening window ends (FR-85).
+
+**Popover row states:**
+
+| State | Row text | Buttons |
+|---|---|---|
+| Asking | "◇ Desk light · Room is dark. Turn on the light bar?" | "Turn on", "Not tonight" |
+| Remote-only, after "Turn on" | "Desk light · Use the bar's remote: press to switch on, turn for warmer." | "It's on", "Not tonight" |
+| Controllable, sent | "✓ Desk light · on, 2700 K, 30 %" | — |
+| Controllable, failed | "⚠ Desk light · couldn't reach the light bar" | "Try again" (one more command, still your tap) |
+| You said on | "✓ Desk light · on (you turned it on)" | — |
+| Not tonight | "Desk light · not tonight. Asks again tomorrow evening." | "Don't ask again" |
+| Withdrawn / idle | row hidden | — |
+
+- The ◇ glyph stands in for an SF Symbol (e.g. `lightbulb`, name UNVERIFIED); the text carries the meaning.
+- **"Not tonight" suppression:** until 06:00 (FR-82). "Don't ask again" is also a toggle in Settings ("Ask about the desk light in the evening").
+- No snooze, no repeat, no badge: HIG says avoid repeat notifications for the same thing.
 
 **Interaction rules:**
 - **The override is the first control, not in a submenu, and doesn't auto-exit.**
@@ -114,6 +165,8 @@ Accessibility:
 - **Hover-reveal controls, or onboarding carousels.**
 - **Custom-drawn sliders.** Use system controls, then style them with tokens.
 - **Animated transitions of the tint.** The monitor itself changes slowly, so the icon can just update.
+- **A bias brightness slider.** The level is a calibration to 5 cd/m² (R08), not a preference.
+- **Repeat or escalating light-bar prompts,** and any light-bar action without a tap (R08 §6).
 
 ---
 
@@ -124,3 +177,4 @@ Accessibility:
 | You'll use the popover more than Settings | Invest in Settings instead. Easy to shift |
 | Nudges beat a slider for you | Add a commit-on-release slider |
 | A tinted menu bar icon is possible and readable | Use shape-only icons |
+| Actionable notifications work for an `LSUIElement` menu bar app (UNVERIFIED) | The popover row alone carries the prompt; FR-87 already requires it |

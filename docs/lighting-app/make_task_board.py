@@ -30,7 +30,22 @@ t("P0-T13","0","Probe 08: brightness response + self-illumination (Q16)","Hardwa
 t("PM-01","0","Set weekly hours (Q15); re-baseline the schedule","Product","Your calendar","—","BUILD_PLAN totals converted to dates",0.5,1,R,"To do",NEW)
 t("PM-02","0","Decide the darkening-latency target (NFR-02: accept ~210 s or faster TAU_DOWN)","Product","SPEC NFR-02","—","NFR-02 and US-1 AC1 updated",0.25,0.5,R,"To do",NEW)
 t("PM-03","0","Close SPEC open questions as probes report (Q1–Q6, Q8, Q9, Q12, Q14)","Product","Probe results","P0-T01…P0-T09","SPEC §7 has an answer or a blocker for each",0.5,1,R,"To do",NEW)
-t("PM-04","0","D0 review after 2 weeks: stop, or build the app; colorimeter; bias light (fixed D65 vs Govee)","Product","Soak log, probe results","P0-T11","Decision written into BUILD_PLAN D0",1,2,R,"To do",NEW)
+t("PM-04","0","D0 review after 2 weeks: stop, or build the app; colorimeter","Product","Soak log, probe results","P0-T11","Decision written into BUILD_PLAN D0",1,2,R,"To do",NEW)
+
+# ── Phase 0b: bias light (Govee H6056) and desk light bar (Xiaomi) in the shell, now (added 2026-10-11)
+t("P0b-T01","0b","Govee setup: confirm the model (Q17), 2.4 GHz Wi-Fi, LAN Control on per light, DHCP reservations","Hardware","Govee Home app, router admin","—","Model in SPEC Q17; LAN Control on; IPs reserved and in GOVEE_IPS",0.25,1,R,"To do",BP)
+t("P0b-T02","0b","Prototype Govee fixes: turn-off, Kelvin clamp 2200–6500, multicast join + unicast scan, sender address when `ip` is missing, `govee status`/`off-all`","Backend","lib/govee.sh, test/fake_govee.py","—","New tests pass for each fix",3,6,NR,"To do",BP)
+t("P0b-T03","0b","Extend probe 07 to checks A–I (R08 §5)","Hardware / Backend","probe/07-govee.sh","P0b-T02","Writes RESULT Q7, Q17, Q18 and a BIAS_CAL line",1.5,3,R,"To do",BP)
+t("P0b-T04","0b","Run probe 07 on the bars (was P8-T01)","Hardware","Dark room, sensor at the wall","P0b-T01, P0b-T03","Q7, Q17, Q18, Q19 answered or blocked with evidence",1,2,NR,"To do",BP)
+t("P0b-T05","0b","Absolute bias level: BIAS_TARGET_NITS + BIAS_WALL_RHO + BIAS_CAL replace BIAS_K; calibrate to 5 cd/m²","Backend (config) / Hardware","Probe 07 check F, white paper for ρ","P0b-T04","Wall reads π·5/ρ lx ± 10 % at night (US-7 AC1)",2,4,NR,"To do",BP)
+t("P0b-T06","0b","Bias colour and off states: follow screen K, 6500 K override, off for display sleep, clean stop, bright room; pre-sleep hook","Backend","lightd, sleepwatcher or the display-state helper","P0b-T02","US-7 AC2, AC3, AC5 on hardware",2,5,NR,"To do",BP)
+t("P0b-T07","0b","BIAS_OFF_LUX (Q22): wall vs bezel lux at 4 times of day","Hardware","The sensor, moved between wall and bezel","P0b-T05","BIAS_OFF_LUX/BIAS_ON_LUX set; Q22 answered",0.5,1,R,"To do",BP)
+t("P0b-T08","0b","Bias soak, 7 days, with the shell soak","QA","Soak checklist + bias lines","P0b-T05, P0b-T06","7 days: off by day, on at night, off after sleep, never stuck on",0.5,1,R,"To do",BP)
+t("PM-08","0b","D0b: keep the Govee for everything, or add a fixed high-CRI D65 strip for colour-critical work","Product","Probe 07 results (A, B, C, E, F, I)","P0b-T04","Decision written into BUILD_PLAN D0b",0.25,0.5,R,"To do",NEW)
+t("P0b-T10","0b","Your task: read the light bar's model label (Q20)","Hardware","The bar, its puck, the box","—","Model in SPEC Q20",0.25,0.5,R,"To do",BP)
+t("P0b-T11","0b","Light bar vs sensor (Q21): lux bar off / 30 % / 100 %, three readings each","Hardware","Fixed room light, `bin/light status`","P0b-T10, P0-T12","Q21 answered with deltas and target changes",0.5,1,R,"To do",BP)
+t("P0b-T12","0b","Shell light-bar prompt: ask logic in lightd + SwiftBar item (Turn on / Not tonight)","Frontend (shell UI) / Backend","SwiftBar, lightd state files","P0-T08, P0b-T10","A week: ≤ 1 prompt an evening; withdrawn at > 20 lx; nothing sent without a tap",2,4,R,"To do",BP)
+t("PM-09","0b","D-LB: Xiaomi integration yes or no, by model","Product","Q20, Q21; a `miiocli` status try for a 1S","P0b-T10, P0b-T11","Decision written into BUILD_PLAN D-LB",0.25,0.5,R,"To do",NEW)
 
 # ── Design (start during Phase 0, needed by Phase 1)
 t("DS-01","1","Popover wireframe: layout, hierarchy, override as the first control (R06 §3)","Design","Figma, R06 §3, DESIGN_TOKENS.md","PM-04","Wireframe approved by you; every FR with UI has a place",2,4,R,"To do",NEW)
@@ -97,9 +112,14 @@ t("P7-T01","7","Settings scene","Frontend","SwiftUI Settings","P6-T03, DS-07","E
 t("DS-08","7","Curve chart design (only with a week of data)","Design","Lux log","P7-T01","Approved design",1,3,R,"Optional",NEW)
 t("P7-T02","7","Curve chart (Swift Charts)","Frontend","Swift Charts","P7-T01, DS-08","Curve + today's lux trace",4,10,R,"Optional",BP)
 
-# ── Phase 8 (optional): bias light
-t("P8-T01","8","Probe 07 on a real strip (Q7)","Hardware","A Govee strip, LAN Control on","PM-04 (strip bought)","Kelvin range and protocol confirmed",0.5,1,R,"Optional",BP)
-t("P8-T02","8","UDP sender + manual IP (FR-60/61)","Backend","Network framework","P8-T01","US-7 met",4,10,NR,"Optional",BP)
+# ── Phase 8: bias light and desk light bar in the app (after Phase 5). P8-T01 moved to P0b-T04 (2026-10-11)
+t("DS-09","8","Design: bias status row (6 states) and the light-bar prompt (notification + popover row)","Design","R06 §3.1–3.2","DS-02","States approved; each distinguishable without colour",1,2,R,"To do",NEW)
+t("P8-T02","8","NWConnection UDP sender, multicast group + unicast scan, manual IPs, source-address fallback (FR-60)","Backend","Network framework","P3-T03, P0b-T04","Both lights found; commands land; I-G* pass",4,10,NR,"To do",BP)
+t("P8-T03","8","BiasController: level from BIAS_CAL, follow K, 6500 K override, off states incl. willSleep, rate limits, reachability (FR-61–67)","Backend","NSWorkspace notifications","P8-T02, P4-T06, P5-T01","US-7 AC1–AC5 on hardware",3,7,NR,"To do",BP)
+t("P8-T04","8","Bias status row and states","Frontend","SwiftUI","P8-T03, P1-T06, DS-09","Each state shown when triggered",1,3,R,"To do",BP)
+t("P8-T05","8","Light-bar prompt: UNUserNotificationCenter actionable notification + popover row (FR-80–83, 85, 87)","Frontend / Backend","UserNotifications","P3-T02, P1-T06, P0b-T12, DS-09","US-8 AC1–AC4 over a week; works with notifications denied",3,6,NR,"To do",BP)
+t("P8-T06","8","Light-bar control: Yeelight LAN (2–4 h) or miIO with a token (6–12 h) (FR-84, FR-86)","Backend","The model from Q20; Keychain","PM-09 (yes), P8-T05","One tap sends one command; failure shown",2,12,GH,"Only if the bar is controllable",BP)
+t("QA-05","8","Hardware check: US-7 and US-8 acceptance criteria with the app","QA","TEST_PLAN; the bars and the light bar","P8-T04, P8-T05","All ACs pass; results recorded",1,2,R,"To do",NEW)
 
 # ── Ongoing
 t("DV-01","ongoing","Optional CI: run test/run_tests.sh (and later `swift test`) on every push","DevOps","GitHub Actions","—","Green check on the branch",1,3,R,"Optional",NEW)
@@ -114,6 +134,7 @@ def fmt(x): return f"{x:g}"
 
 PHASES = {
  "0":"Phase 0: calibrate and live with the shell system (now)",
+ "0b":"Phase 0b: bias light and desk light bar in the shell (now)",
  "1":"Phase 1: native menu bar companion (shell still drives the hardware)",
  "2":"Phase 2: the engine in Swift",
  "3":"Phase 3: native sensor client",
@@ -121,10 +142,10 @@ PHASES = {
  "5":"Phase 5: sleep, wake and replugging",
  "6":"Phase 6: shell retired",
  "7":"Phase 7 (optional): settings and chart",
- "8":"Phase 8 (optional, after buying a strip): bias light",
+ "8":"Phase 8: bias light and desk light bar in the app (after Phase 5)",
  "ongoing":"Ongoing (optional)",
 }
-optional = lambda r: r[10] in ("Optional", "Only if P0-T06 fails")
+optional = lambda r: r[10] in ("Optional", "Only if P0-T06 fails", "Only if the bar is controllable")
 
 # Totals by type, core (non-optional) vs optional
 by = collections.OrderedDict()
@@ -132,14 +153,19 @@ for r in T:
     k = primary(r[3]); d = by.setdefault(k, [0, 0, 0, 0, 0])
     if optional(r): d[3] += r[7]; d[4] += r[8]
     else: d[0] += 1; d[1] += r[7]; d[2] += r[8]
-new_lo = sum(r[7] for r in T if r[11] == NEW and not optional(r) and r[1] not in ("0",))
-new_hi = sum(r[8] for r in T if r[11] == NEW and not optional(r) and r[1] not in ("0",))
-core = [r for r in T if not optional(r) and r[1] in "123456"]
+CORE = ("1","2","3","4","5","6")
+new_lo = sum(r[7] for r in T if r[11] == NEW and not optional(r) and r[1] in CORE)
+new_hi = sum(r[8] for r in T if r[11] == NEW and not optional(r) and r[1] in CORE)
+core = [r for r in T if not optional(r) and r[1] in CORE]
 core_lo = sum(r[7] for r in core); core_hi = sum(r[8] for r in core)
+def span(ph):
+    rows = [r for r in T if r[1] == ph and not optional(r)]
+    return sum(r[7] for r in rows), sum(r[8] for r in rows)
+p0b_lo, p0b_hi = span("0b"); p8_lo, p8_hi = span("8")
 
 L = []
 L.append("# Task board\n")
-L.append("Status: 2026-09-27. Generated from BUILD_PLAN, SPEC, TEST_PLAN and RESEARCH_06. The same tasks are in [`tasks.csv`](tasks.csv), for import into Notion, Linear, Jira or GitHub Projects.\n")
+L.append("Status: 2026-09-27; bias light and desk light bar added 2026-10-11 (Phase 0b, Phase 8). Generated from BUILD_PLAN, SPEC, TEST_PLAN, RESEARCH_06 and RESEARCH_08. The same tasks are in [`tasks.csv`](tasks.csv), for import into Notion, Linear, Jira or GitHub Projects.\n")
 L.append("## How to read it\n")
 L.append("**Type** is the kind of work, as on a product team. In a native Mac app the split is:\n")
 L.append("| Type | Here, that means |\n|---|---|")
@@ -151,17 +177,18 @@ L.append("| **Hardware** | Probes on the real Mac, monitor and sensor; ESP32 fir
 L.append("| **DevOps** | Xcode project, signing, launch at login, launchd, CI |")
 L.append("| **QA** | Manual checks and soak weeks on real hardware (automated tests live inside each Backend task's \"done when\") |\n")
 L.append("A type like \"Backend / Frontend\" means both; the first one is the main kind of work.\n")
-L.append("- **Source:** `BUILD_PLAN` tasks keep their IDs and hours. Tasks marked **new** (DS-, PM-, QA-, DV-, P0-T03b, P0-T12, P0-T13) weren't in BUILD_PLAN. The docs implied them: R06's design spec, SPEC's open decisions, TEST_PLAN's manual checks. Their hours are my estimates, on the same basis as BUILD_PLAN's.")
+L.append("- **Source:** `BUILD_PLAN` tasks keep their IDs and hours. Tasks marked **new** (DS-, PM-, QA-, DV-, P0-T03b, P0-T12, P0-T13; added 2026-10-11: PM-08, PM-09, DS-09, QA-05) weren't in BUILD_PLAN. The docs implied them: R06's design spec, SPEC's open decisions, TEST_PLAN's manual checks. Their hours are my estimates, on the same basis as BUILD_PLAN's.")
 L.append("- **Hours** are ranges for you learning Swift with AI pair-programming (BUILD_PLAN, \"How to read the estimates\").")
 L.append("- **Everyone is you.** One person holds every role, so the types are for planning your weeks (a design day, a hardware evening), not for handing work to other people.\n")
 
 L.append("## Summary\n")
-L.append("| Type | Core tasks (Phases 0–6) | Core hours | Optional hours |\n|---|---|---|---|")
+L.append("| Type | Core tasks (Phases 0, 0b, 1–6, 8) | Core hours | Optional hours |\n|---|---|---|---|")
 for k, (n, lo, hi, olo, ohi) in by.items():
     L.append(f"| {k} | {n} | {fmt(lo)}–{fmt(hi)} | {fmt(olo)}–{fmt(ohi)} |" if (olo or ohi) else f"| {k} | {n} | {fmt(lo)}–{fmt(hi)} | — |")
 tot = [sum(v[i] for v in by.values()) for i in range(5)]
 L.append(f"| **All** | **{tot[0]}** | **{fmt(tot[1])}–{fmt(tot[2])}** | {fmt(tot[3])}–{fmt(tot[4])} |\n")
 L.append(f"- **Phases 1–6 (the native app):** about {round(core_lo)}–{round(core_hi)} h. BUILD_PLAN's tasks alone are 72–179 h; the extra {round(new_lo)}–{round(new_hi)} h is the design, QA and decision work that BUILD_PLAN left implicit.")
+L.append(f"- **Phase 0b (bias light + light bar, shell, now):** {fmt(p0b_lo)}–{fmt(p0b_hi)} h, run alongside Phase 0's soak. **Phase 8 (the same in the app):** {fmt(p8_lo)}–{fmt(p8_hi)} h, plus 2–12 h for P8-T06 if the light bar can be controlled (D-LB).")
 L.append("- **Backend is most of the work, and nearly all the risk:** the three \"genuinely hard\" app tasks (P4-T02, P4-T03, P5-T02) are all Backend.")
 L.append("- **Design is small but comes first:** Phase 1's views depend on DS-01 to DS-05, so they should be done before or alongside P1-T01.\n")
 
@@ -188,7 +215,7 @@ for ph, title in PHASES.items():
     L.append("")
 
 L.append("## Not on the board\n")
-L.append("These are deliberately excluded (SPEC §3 and \"What not to build\"): multiple monitors, Intel, the App Store, permanent learning, spline curves, smooth DDC transitions, contrast or HDR, screen-colour sync for the bias light, and the Govee cloud API. Settings UI waits for Phase 7. Govee waits for a strip.\n")
+L.append("These are deliberately excluded (SPEC §3 and \"What not to build\"): multiple monitors, Intel, the App Store, permanent learning, spline curves, smooth DDC transitions, contrast or HDR, screen-colour sync for the bias light, and the Govee cloud API. Also no automatic light-bar switching, and no Govee BLE or Matter path. Settings UI waits for Phase 7. (Changed 2026-10-11: \"Govee waits for a strip\" is gone; the bars are bought.)\n")
 L.append("## Assumptions\n")
 L.append("| Assumption | If wrong |\n|---|---|")
 L.append("| You'll do every role yourself | With a second person, Design and Hardware can run in parallel with Backend, and the calendar time shrinks, though the hours don't |")

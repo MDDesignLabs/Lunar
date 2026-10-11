@@ -1,6 +1,6 @@
 # Task board
 
-Status: 2026-09-27. Generated from BUILD_PLAN, SPEC, TEST_PLAN and RESEARCH_06. The same tasks are in [`tasks.csv`](tasks.csv), for import into Notion, Linear, Jira or GitHub Projects.
+Status: 2026-09-27; bias light and desk light bar added 2026-10-11 (Phase 0b, Phase 8). Generated from BUILD_PLAN, SPEC, TEST_PLAN, RESEARCH_06 and RESEARCH_08. The same tasks are in [`tasks.csv`](tasks.csv), for import into Notion, Linear, Jira or GitHub Projects.
 
 ## How to read it
 
@@ -18,24 +18,25 @@ Status: 2026-09-27. Generated from BUILD_PLAN, SPEC, TEST_PLAN and RESEARCH_06. 
 
 A type like "Backend / Frontend" means both; the first one is the main kind of work.
 
-- **Source:** `BUILD_PLAN` tasks keep their IDs and hours. Tasks marked **new** (DS-, PM-, QA-, DV-, P0-T03b, P0-T12, P0-T13) weren't in BUILD_PLAN. The docs implied them: R06's design spec, SPEC's open decisions, TEST_PLAN's manual checks. Their hours are my estimates, on the same basis as BUILD_PLAN's.
+- **Source:** `BUILD_PLAN` tasks keep their IDs and hours. Tasks marked **new** (DS-, PM-, QA-, DV-, P0-T03b, P0-T12, P0-T13; added 2026-10-11: PM-08, PM-09, DS-09, QA-05) weren't in BUILD_PLAN. The docs implied them: R06's design spec, SPEC's open decisions, TEST_PLAN's manual checks. Their hours are my estimates, on the same basis as BUILD_PLAN's.
 - **Hours** are ranges for you learning Swift with AI pair-programming (BUILD_PLAN, "How to read the estimates").
 - **Everyone is you.** One person holds every role, so the types are for planning your weeks (a design day, a hardware evening), not for handing work to other people.
 
 ## Summary
 
-| Type | Core tasks (Phases 0–6) | Core hours | Optional hours |
+| Type | Core tasks (Phases 0, 0b, 1–6, 8) | Core hours | Optional hours |
 |---|---|---|---|
-| Hardware | 6 | 2.75–5.5 | 2–6 |
-| Backend | 24 | 59–146 | 4–10 |
+| Hardware | 12 | 6.75–14 | 1.5–5 |
+| Backend | 29 | 73–178 | 2–12 |
 | DevOps | 4 | 4–13 | 3–9 |
-| Frontend | 6 | 10–24 | 10–24 |
-| QA | 6 | 9.5–14.5 | — |
-| Product | 8 | 3.5–6.75 | — |
-| Design | 6 | 8–18 | 3–7 |
-| **All** | **60** | **96.75–227.75** | 22–56 |
+| Frontend | 9 | 16–37 | 10–24 |
+| QA | 8 | 11–17.5 | — |
+| Product | 10 | 4–7.75 | — |
+| Design | 7 | 9–20 | 3–7 |
+| **All** | **79** | **123.75–287.25** | 19.5–57 |
 
 - **Phases 1–6 (the native app):** about 87–210 h. BUILD_PLAN's tasks alone are 72–179 h; the extra 16–31 h is the design, QA and decision work that BUILD_PLAN left implicit.
+- **Phase 0b (bias light + light bar, shell, now):** 14–29.5 h, run alongside Phase 0's soak. **Phase 8 (the same in the app):** 13–30 h, plus 2–12 h for P8-T06 if the light bar can be controlled (D-LB).
 - **Backend is most of the work, and nearly all the risk:** the three "genuinely hard" app tasks (P4-T02, P4-T03, P5-T02) are all Backend.
 - **Design is small but comes first:** Phase 1's views depend on DS-01 to DS-05, so they should be done before or alongside P1-T01.
 
@@ -75,7 +76,25 @@ That's 36–86 h of hands-on work end to end (computed from the dependencies), p
 | PM-01 *(new)* | Set weekly hours (Q15); re-baseline the schedule | Product | Your calendar | — | BUILD_PLAN totals converted to dates | 0.5–1 | routine | To do |
 | PM-02 *(new)* | Decide the darkening-latency target (NFR-02: accept ~210 s or faster TAU_DOWN) | Product | SPEC NFR-02 | — | NFR-02 and US-1 AC1 updated | 0.25–0.5 | routine | To do |
 | PM-03 *(new)* | Close SPEC open questions as probes report (Q1–Q6, Q8, Q9, Q12, Q14) | Product | Probe results | P0-T01…P0-T09 | SPEC §7 has an answer or a blocker for each | 0.5–1 | routine | To do |
-| PM-04 *(new)* | D0 review after 2 weeks: stop, or build the app; colorimeter; bias light (fixed D65 vs Govee) | Product | Soak log, probe results | P0-T11 | Decision written into BUILD_PLAN D0 | 1–2 | routine | To do |
+| PM-04 *(new)* | D0 review after 2 weeks: stop, or build the app; colorimeter | Product | Soak log, probe results | P0-T11 | Decision written into BUILD_PLAN D0 | 1–2 | routine | To do |
+
+### Phase 0b: bias light and desk light bar in the shell (now)
+
+| ID | Task | Type | Requires | Depends on | Done when | Hours | Difficulty | Status |
+|---|---|---|---|---|---|---|---|---|
+| P0b-T01 | Govee setup: confirm the model (Q17), 2.4 GHz Wi-Fi, LAN Control on per light, DHCP reservations | Hardware | Govee Home app, router admin | — | Model in SPEC Q17; LAN Control on; IPs reserved and in GOVEE_IPS | 0.25–1 | routine | To do |
+| P0b-T02 | Prototype Govee fixes: turn-off, Kelvin clamp 2200–6500, multicast join + unicast scan, sender address when `ip` is missing, `govee status`/`off-all` | Backend | lib/govee.sh, test/fake_govee.py | — | New tests pass for each fix | 3–6 | needs research | To do |
+| P0b-T03 | Extend probe 07 to checks A–I (R08 §5) | Hardware / Backend | probe/07-govee.sh | P0b-T02 | Writes RESULT Q7, Q17, Q18 and a BIAS_CAL line | 1.5–3 | routine | To do |
+| P0b-T04 | Run probe 07 on the bars (was P8-T01) | Hardware | Dark room, sensor at the wall | P0b-T01, P0b-T03 | Q7, Q17, Q18, Q19 answered or blocked with evidence | 1–2 | needs research | To do |
+| P0b-T05 | Absolute bias level: BIAS_TARGET_NITS + BIAS_WALL_RHO + BIAS_CAL replace BIAS_K; calibrate to 5 cd/m² | Backend (config) / Hardware | Probe 07 check F, white paper for ρ | P0b-T04 | Wall reads π·5/ρ lx ± 10 % at night (US-7 AC1) | 2–4 | needs research | To do |
+| P0b-T06 | Bias colour and off states: follow screen K, 6500 K override, off for display sleep, clean stop, bright room; pre-sleep hook | Backend | lightd, sleepwatcher or the display-state helper | P0b-T02 | US-7 AC2, AC3, AC5 on hardware | 2–5 | needs research | To do |
+| P0b-T07 | BIAS_OFF_LUX (Q22): wall vs bezel lux at 4 times of day | Hardware | The sensor, moved between wall and bezel | P0b-T05 | BIAS_OFF_LUX/BIAS_ON_LUX set; Q22 answered | 0.5–1 | routine | To do |
+| P0b-T08 | Bias soak, 7 days, with the shell soak | QA | Soak checklist + bias lines | P0b-T05, P0b-T06 | 7 days: off by day, on at night, off after sleep, never stuck on | 0.5–1 | routine | To do |
+| PM-08 *(new)* | D0b: keep the Govee for everything, or add a fixed high-CRI D65 strip for colour-critical work | Product | Probe 07 results (A, B, C, E, F, I) | P0b-T04 | Decision written into BUILD_PLAN D0b | 0.25–0.5 | routine | To do |
+| P0b-T10 | Your task: read the light bar's model label (Q20) | Hardware | The bar, its puck, the box | — | Model in SPEC Q20 | 0.25–0.5 | routine | To do |
+| P0b-T11 | Light bar vs sensor (Q21): lux bar off / 30 % / 100 %, three readings each | Hardware | Fixed room light, `bin/light status` | P0b-T10, P0-T12 | Q21 answered with deltas and target changes | 0.5–1 | routine | To do |
+| P0b-T12 | Shell light-bar prompt: ask logic in lightd + SwiftBar item (Turn on / Not tonight) | Frontend (shell UI) / Backend | SwiftBar, lightd state files | P0-T08, P0b-T10 | A week: ≤ 1 prompt an evening; withdrawn at > 20 lx; nothing sent without a tap | 2–4 | routine | To do |
+| PM-09 *(new)* | D-LB: Xiaomi integration yes or no, by model | Product | Q20, Q21; a `miiocli` status try for a 1S | P0b-T10, P0b-T11 | Decision written into BUILD_PLAN D-LB | 0.25–0.5 | routine | To do |
 
 ### Phase 1: native menu bar companion (shell still drives the hardware)
 
@@ -161,12 +180,17 @@ That's 36–86 h of hands-on work end to end (computed from the dependencies), p
 | DS-08 *(new)* | Curve chart design (only with a week of data) | Design | Lux log | P7-T01 | Approved design | 1–3 | routine | Optional |
 | P7-T02 | Curve chart (Swift Charts) | Frontend | Swift Charts | P7-T01, DS-08 | Curve + today's lux trace | 4–10 | routine | Optional |
 
-### Phase 8 (optional, after buying a strip): bias light
+### Phase 8: bias light and desk light bar in the app (after Phase 5)
 
 | ID | Task | Type | Requires | Depends on | Done when | Hours | Difficulty | Status |
 |---|---|---|---|---|---|---|---|---|
-| P8-T01 | Probe 07 on a real strip (Q7) | Hardware | A Govee strip, LAN Control on | PM-04 (strip bought) | Kelvin range and protocol confirmed | 0.5–1 | routine | Optional |
-| P8-T02 | UDP sender + manual IP (FR-60/61) | Backend | Network framework | P8-T01 | US-7 met | 4–10 | needs research | Optional |
+| DS-09 *(new)* | Design: bias status row (6 states) and the light-bar prompt (notification + popover row) | Design | R06 §3.1–3.2 | DS-02 | States approved; each distinguishable without colour | 1–2 | routine | To do |
+| P8-T02 | NWConnection UDP sender, multicast group + unicast scan, manual IPs, source-address fallback (FR-60) | Backend | Network framework | P3-T03, P0b-T04 | Both lights found; commands land; I-G* pass | 4–10 | needs research | To do |
+| P8-T03 | BiasController: level from BIAS_CAL, follow K, 6500 K override, off states incl. willSleep, rate limits, reachability (FR-61–67) | Backend | NSWorkspace notifications | P8-T02, P4-T06, P5-T01 | US-7 AC1–AC5 on hardware | 3–7 | needs research | To do |
+| P8-T04 | Bias status row and states | Frontend | SwiftUI | P8-T03, P1-T06, DS-09 | Each state shown when triggered | 1–3 | routine | To do |
+| P8-T05 | Light-bar prompt: UNUserNotificationCenter actionable notification + popover row (FR-80–83, 85, 87) | Frontend / Backend | UserNotifications | P3-T02, P1-T06, P0b-T12, DS-09 | US-8 AC1–AC4 over a week; works with notifications denied | 3–6 | needs research | To do |
+| P8-T06 | Light-bar control: Yeelight LAN (2–4 h) or miIO with a token (6–12 h) (FR-84, FR-86) | Backend | The model from Q20; Keychain | PM-09 (yes), P8-T05 | One tap sends one command; failure shown | 2–12 | genuinely hard | Only if the bar is controllable |
+| QA-05 *(new)* | Hardware check: US-7 and US-8 acceptance criteria with the app | QA | TEST_PLAN; the bars and the light bar | P8-T04, P8-T05 | All ACs pass; results recorded | 1–2 | routine | To do |
 
 ### Ongoing (optional)
 
@@ -176,7 +200,7 @@ That's 36–86 h of hands-on work end to end (computed from the dependencies), p
 
 ## Not on the board
 
-These are deliberately excluded (SPEC §3 and "What not to build"): multiple monitors, Intel, the App Store, permanent learning, spline curves, smooth DDC transitions, contrast or HDR, screen-colour sync for the bias light, and the Govee cloud API. Settings UI waits for Phase 7. Govee waits for a strip.
+These are deliberately excluded (SPEC §3 and "What not to build"): multiple monitors, Intel, the App Store, permanent learning, spline curves, smooth DDC transitions, contrast or HDR, screen-colour sync for the bias light, and the Govee cloud API. Also no automatic light-bar switching, and no Govee BLE or Matter path. Settings UI waits for Phase 7. (Changed 2026-10-11: "Govee waits for a strip" is gone; the bars are bought.)
 
 ## Assumptions
 

@@ -1,5 +1,7 @@
 # Research 05: Bias light (Govee protocol, alternatives)
 
+> **Superseded by [RESEARCH_08](RESEARCH_08_BIAS_AND_DESK_LIGHT.md) (2026-10-11).** You've bought Govee H6056 light bars, which are on Govee's LAN list ✓. RESEARCH_08 sets the level (5 cd/m² absolute), colour, off states and the planned prototype changes. This file is kept as history; corrections are marked in place.
+
 Status: research, 2026-09-26. **No Govee hardware owned yet.** Source tags:
 
 - **[code: …]**: `wez/govee-py` (`govee_led_wez/govee.py`) and `wez/govee-lan-hass`, cloned this session
@@ -46,6 +48,8 @@ Govee's own guide (`app-h5.govee.com/user-manual/wlan-guide`) and its community 
 
 ## 2. How bright the bias light should be: an unresolved contradiction
 
+> **Corrected in place 2026-10-11: resolved. 5 cd/m² absolute.** SMPTE ST 2080-3:2017 §6.4: "The reflected light from the surround or background in the field of view shall have a luminance of 5.0 ± 0.5 candelas per square meter" ✓ (pub.smpte.org PDF). An ITU-R WP6C document confirms ST 2080-3 replaced BT.2035's "10% of reference white" ✓. At this desk's night floor (~48–55 cd/m², RESEARCH_07) the two rules nearly coincide; in daytime they don't. `BIAS_K` is to be replaced by an absolute target (RESEARCH_08 §4). The text below is the original reasoning.
+
 - **Your brief:** about 10% of screen brightness.
 - **What I could find:** web-search summaries attribute to SMPTE ST 2080-3 **both** "5 cd/m² absolute, D65" **and** "about 10% of peak white". The same summary contradicts itself, and I couldn't open the source pages (d65.org and Wikipedia were blocked). The standard itself is paywalled. **UNVERIFIED either way.**
   - Added 2026-09-26: a later search summary attributes the **5 cd/m² D65 surround to ST 2080-3**, and "10%" to the **older SDR rule of thumb (RP 166)**. Still secondary and still UNVERIFIED, but it leans towards an **absolute** level for the current standard.
@@ -56,6 +60,8 @@ Govee's own guide (`app-h5.govee.com/user-manual/wlan-guide`) and its community 
 ---
 
 ## 3. Alternatives worth considering *before* buying Govee
+
+*Note 2026-10-11:* Govee is bought. The fixed high-CRI D65 strip stays the fallback for colour-critical work, decided after probe 07 (BUILD_PLAN D0b).
 
 | Option | Adaptive? | Colour-critical friendly? | Integration effort | Evidence |
 |---|---|---|---|---|
@@ -75,7 +81,7 @@ Govee's own guide (`app-h5.govee.com/user-manual/wlan-guide`) and its community 
 - **Screen-content colour sync** (ambilight). It's a different product and needs screen capture.
 - **The Govee cloud API.** It adds keys, rate limits and a network dependency.
 - **BLE control** (`govee-py` has `ble.py`). LAN is enough.
-- **Any Govee code before you own a strip.** The prototype's version stays disabled (`GOVEE_IPS=""`).
+- **Any Govee code before you own a strip.** The prototype's version stays disabled (`GOVEE_IPS=""`). *Superseded 2026-10-11: the bars are bought; see RESEARCH_08.*
 - **Automatic discovery as the only path.** Always allow a manual IP [src: govee2mqtt].
 
 ---
