@@ -22,18 +22,46 @@ A type like "Backend / Frontend" means both; the first one is the main kind of w
 - **Hours** are ranges for you learning Swift with AI pair-programming (BUILD_PLAN, "How to read the estimates").
 - **Everyone is you.** One person holds every role, so the types are for planning your weeks (a design day, a hardware evening), not for handing work to other people.
 
+## Progress
+
+✅ done · 🔄 in progress · ➖ not needed. Everything else is to do or optional.
+
+| Done | In progress | Not needed | To do | Optional |
+|---|---|---|---|---|
+| 5 | 3 | 1 | 71 | 8 |
+
+**Finished so far:**
+- ✅ **P0-T03** Probe 05: gain domain (Q3, Q4): 2026-10-11: linear light, no headroom
+- ✅ **P0-T03b** Re-analyse probe 05's CSV with the fixed analysis; compare with the first verdict: 2026-10-11: both agree
+- ✅ **P0-T05** Write `~/.lighting/config.sh` from the results: 2026-10-12: measured gains + research curve are repo defaults (`light update`); M1DDC waits on probe 04
+- ✅ **P0-T06** Install lightd; test Local Network as an agent (Q8): 2026-10-11: works under launchd, also after a reboot
+- ✅ **P0-T12** Apply the research brightness curve to ~/.lighting/config.sh: 2026-10-12 (`light update`)
+
+**In progress:**
+- 🔄 **P0-T01** Report probe 03 and 04 results: Run; results not reported
+- 🔄 **P0-T11** One-week soak of the shell system: In progress: started 2026-10-12
+- 🔄 **PM-03** Close SPEC open questions as probes report (Q1–Q6, Q8, Q9, Q12, Q14): In progress: Q3, Q4, Q8 answered
+
+Also done, outside these tasks:
+- the shell prototype, the probe kit and the 127-check test suite;
+- two review rounds (REVIEW_2026-09-26.md);
+- RESEARCH_01–08, SPEC, BUILD_PLAN and TEST_PLAN;
+- the first live hardware run and its fixes;
+- `bin/light update`.
+All of it is in `docs/lighting-app/` and `lighting-prototype/`.
+
 ## Summary
 
 | Type | Core tasks (Phases 0, 0b, 1–6, 8) | Core hours | Optional hours |
 |---|---|---|---|
 | Hardware | 12 | 6.75–14 | 1.5–5 |
 | Backend | 29 | 73–178 | 2–12 |
-| DevOps | 4 | 4–13 | 3–9 |
+| DevOps | 5 | 6–19 | 1–3 |
 | Frontend | 9 | 16–37 | 10–24 |
 | QA | 8 | 11–17.5 | — |
 | Product | 10 | 4–7.75 | — |
 | Design | 7 | 9–20 | 3–7 |
-| **All** | **79** | **123.75–287.25** | 19.5–57 |
+| **All** | **80** | **125.75–293.25** | 17.5–51 |
 
 - **Phases 1–6 (the native app):** about 87–210 h. BUILD_PLAN's tasks alone are 72–179 h; the extra 16–31 h is the design, QA and decision work that BUILD_PLAN left implicit.
 - **Phase 0b (bias light + light bar, shell, now):** 14–29.5 h, run alongside Phase 0's soak. **Phase 8 (the same in the app):** 13–30 h, plus 2–12 h for P8-T06 if the light bar can be controlled (D-LB).
@@ -59,23 +87,23 @@ That's 36–86 h of hands-on work end to end (computed from the dependencies), p
 
 | ID | Task | Type | Requires | Depends on | Done when | Hours | Difficulty | Status |
 |---|---|---|---|---|---|---|---|---|
-| P0-T01 | Report probe 03 and 04 results | Hardware | Mac, AOC OSD, the results files | — | Q1, Q2, Q14 answered in SPEC §7 with values | 0.25–0.5 | routine | Run; results not reported |
+| P0-T01 | Report probe 03 and 04 results | Hardware | Mac, AOC OSD, the results files | — | Q1, Q2, Q14 answered in SPEC §7 with values | 0.25–0.5 | routine | 🔄 Run; results not reported |
 | P0-T02 | Mac Studio chip + AOC port + `m1ddc display list detailed` (Q9) | Hardware | Mac, a look at the cable | — | Chip, port and chip address (0x37/0xB7) recorded | 0.25–0.5 | routine | To do |
-| P0-T03 | Probe 05: gain domain (Q3, Q4) | Hardware | Dark room, sensor on the screen | P0-T01 | RESULT Q3 present, drift < 3% | 1–3 | needs research | Done 2026-10-11: linear light, no headroom |
-| P0-T03b *(new)* | Re-analyse probe 05's CSV with the fixed analysis; compare with the first verdict | Hardware / Backend | The CSV, `git pull` | P0-T03 | Both analyses agree, or the difference is explained; GAIN_TABLE and GAIN_GAMMA chosen | 0.25–0.5 | routine | Done 2026-10-11: both agree |
+| P0-T03 | Probe 05: gain domain (Q3, Q4) | Hardware | Dark room, sensor on the screen | P0-T01 | RESULT Q3 present, drift < 3% | 1–3 | needs research | ✅ Done 2026-10-11: linear light, no headroom |
+| P0-T03b *(new)* | Re-analyse probe 05's CSV with the fixed analysis; compare with the first verdict | Hardware / Backend | The CSV, `git pull` | P0-T03 | Both analyses agree, or the difference is explained; GAIN_TABLE and GAIN_GAMMA chosen | 0.25–0.5 | routine | ✅ Done 2026-10-11: both agree |
 | P0-T04 | Probe 06 Part A: what resets gains (Q5) | Hardware | Mac, monitor buttons | P0-T01 | KEPT/RESET for sleep, input, power | 0.5 | routine | To do |
 | P0-T09 | Probe 02: 24 h sensor log (Q6), Lunar quit | Hardware | ESP32 powered, Mac awake 24 h | — | RESULT Q6; lux CSV saved | 0.5 | routine | To do |
 | P0-T10 | Optional: reflash ESP32 with `power_save_mode: none` (Q12) | Hardware (firmware) | ESPHome toolchain, USB cable | P0-T09 | Second probe 02 compared with the first | 1–4 | needs research | Optional |
-| P0-T05 | Write `~/.lighting/config.sh` from the results | Backend (config) | Probe results | P0-T01, P0-T02, P0-T03b, P0-T04 | Every value has a comment saying where it came from | 1–2 | routine | To do |
-| P0-T06 | Install lightd; test Local Network as an agent (Q8) | DevOps | `./install.sh`, launchd | P0-T05, P0-T09 | Lux updating under launchd for 1 h, or Q8 marked blocked with evidence | 0.5–2 | needs research | Done 2026-10-11: works under launchd, also after a reboot |
-| P0-T07 | If blocked: Terminal session or launchd daemon workaround | DevOps | launchd, possibly root | P0-T06 | lightd runs unattended across logout/login | 2–6 | genuinely hard | Only if P0-T06 fails |
+| P0-T05 | Write `~/.lighting/config.sh` from the results | Backend (config) | Probe results | P0-T01, P0-T02, P0-T03b, P0-T04 | Every value has a comment saying where it came from | 1–2 | routine | ✅ Done 2026-10-12: measured gains + research curve are repo defaults (`light update`); M1DDC waits on probe 04 |
+| P0-T06 | Install lightd; test Local Network as an agent (Q8) | DevOps | `./install.sh`, launchd | P0-T05, P0-T09 | Lux updating under launchd for 1 h, or Q8 marked blocked with evidence | 0.5–2 | needs research | ✅ Done 2026-10-11: works under launchd, also after a reboot |
+| P0-T07 | If blocked: Terminal session or launchd daemon workaround | DevOps | launchd, possibly root | P0-T06 | lightd runs unattended across logout/login | 2–6 | genuinely hard | ➖ Not needed: P0-T06 passed |
 | P0-T08 | SwiftBar item + override Shortcut with a hotkey | Frontend (shell UI) | SwiftBar, Shortcuts app | P0-T06 (or P0-T07) | Override toggles from menu bar and hotkey in < 2 s | 1–2 | routine | To do |
-| P0-T11 | One-week soak of the shell system | QA | The daily soak checklist (TEST_PLAN §5) | P0-T05, P0-T06, P0-T08 | 7 days logged | 1.75 | routine | To do |
-| P0-T12 *(new)* | Apply the research brightness curve to ~/.lighting/config.sh | Product / Backend (config) | RESEARCH_07 §3, the config file | P0-T05 | Curve, BRIGHTNESS_MIN=0, LUMINANCE_COMPENSATION=0 and MONITOR_NITS 55/372 in config.sh; lightd restarted; sensor on the top bezel | 0.25 | routine | To do |
+| P0-T11 | One-week soak of the shell system | QA | The daily soak checklist (TEST_PLAN §5) | P0-T05, P0-T06, P0-T08 | 7 days logged | 1.75 | routine | 🔄 In progress: started 2026-10-12 |
+| P0-T12 *(new)* | Apply the research brightness curve to ~/.lighting/config.sh | Product / Backend (config) | RESEARCH_07 §3, the config file | P0-T05 | Curve, BRIGHTNESS_MIN=0, LUMINANCE_COMPENSATION=0 and MONITOR_NITS 55/372 in config.sh; lightd restarted; sensor on the top bezel | 0.25 | routine | ✅ Done 2026-10-12 (`light update`) |
 | P0-T13 *(new)* | Probe 08: brightness response + self-illumination (Q16) | Hardware | Dark room; sensor on the screen (Part A), then at the bezel (Part B) | P0-T12 | RESULT Q16a (curve matches KitGuru, or a measured BRIGHTNESS_CURVE) and RESULT Q16b (negligible or significant) | 0.5–1 | routine | Optional |
 | PM-01 *(new)* | Set weekly hours (Q15); re-baseline the schedule | Product | Your calendar | — | BUILD_PLAN totals converted to dates | 0.5–1 | routine | To do |
 | PM-02 *(new)* | Decide the darkening-latency target (NFR-02: accept ~210 s or faster TAU_DOWN) | Product | SPEC NFR-02 | — | NFR-02 and US-1 AC1 updated | 0.25–0.5 | routine | To do |
-| PM-03 *(new)* | Close SPEC open questions as probes report (Q1–Q6, Q8, Q9, Q12, Q14) | Product | Probe results | P0-T01…P0-T09 | SPEC §7 has an answer or a blocker for each | 0.5–1 | routine | To do |
+| PM-03 *(new)* | Close SPEC open questions as probes report (Q1–Q6, Q8, Q9, Q12, Q14) | Product | Probe results | P0-T01…P0-T09 | SPEC §7 has an answer or a blocker for each | 0.5–1 | routine | 🔄 In progress: Q3, Q4, Q8 answered |
 | PM-04 *(new)* | D0 review after 2 weeks: stop, or build the app; colorimeter | Product | Soak log, probe results | P0-T11 | Decision written into BUILD_PLAN D0 | 1–2 | routine | To do |
 
 ### Phase 0b: bias light and desk light bar in the shell (now)

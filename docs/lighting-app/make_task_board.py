@@ -20,16 +20,16 @@ t("P0-T03b","0","Re-analyse probe 05's CSV with the fixed analysis; compare with
 t("P0-T04","0","Probe 06 Part A: what resets gains (Q5)","Hardware","Mac, monitor buttons","P0-T01","KEPT/RESET for sleep, input, power",0.5,0.5,R,"To do",BP)
 t("P0-T09","0","Probe 02: 24 h sensor log (Q6), Lunar quit","Hardware","ESP32 powered, Mac awake 24 h","—","RESULT Q6; lux CSV saved",0.5,0.5,R,"To do",BP)
 t("P0-T10","0","Optional: reflash ESP32 with `power_save_mode: none` (Q12)","Hardware (firmware)","ESPHome toolchain, USB cable","P0-T09","Second probe 02 compared with the first",1,4,NR,"Optional",BP)
-t("P0-T05","0","Write `~/.lighting/config.sh` from the results","Backend (config)","Probe results","P0-T01, P0-T02, P0-T03b, P0-T04","Every value has a comment saying where it came from",1,2,R,"To do",BP)
+t("P0-T05","0","Write `~/.lighting/config.sh` from the results","Backend (config)","Probe results","P0-T01, P0-T02, P0-T03b, P0-T04","Every value has a comment saying where it came from",1,2,R,"Done 2026-10-12: measured gains + research curve are repo defaults (`light update`); M1DDC waits on probe 04",BP)
 t("P0-T06","0","Install lightd; test Local Network as an agent (Q8)","DevOps","`./install.sh`, launchd","P0-T05, P0-T09","Lux updating under launchd for 1 h, or Q8 marked blocked with evidence",0.5,2,NR,"Done 2026-10-11: works under launchd, also after a reboot",BP)
-t("P0-T07","0","If blocked: Terminal session or launchd daemon workaround","DevOps","launchd, possibly root","P0-T06","lightd runs unattended across logout/login",2,6,GH,"Only if P0-T06 fails",BP)
+t("P0-T07","0","If blocked: Terminal session or launchd daemon workaround","DevOps","launchd, possibly root","P0-T06","lightd runs unattended across logout/login",2,6,GH,"Not needed: P0-T06 passed",BP)
 t("P0-T08","0","SwiftBar item + override Shortcut with a hotkey","Frontend (shell UI)","SwiftBar, Shortcuts app","P0-T06 (or P0-T07)","Override toggles from menu bar and hotkey in < 2 s",1,2,R,"To do",BP)
-t("P0-T11","0","One-week soak of the shell system","QA","The daily soak checklist (TEST_PLAN §5)","P0-T05, P0-T06, P0-T08","7 days logged",1.75,1.75,R,"To do",BP)
-t("P0-T12","0","Apply the research brightness curve to ~/.lighting/config.sh","Product / Backend (config)","RESEARCH_07 §3, the config file","P0-T05","Curve, BRIGHTNESS_MIN=0, LUMINANCE_COMPENSATION=0 and MONITOR_NITS 55/372 in config.sh; lightd restarted; sensor on the top bezel",0.25,0.25,R,"To do",NEW)
+t("P0-T11","0","One-week soak of the shell system","QA","The daily soak checklist (TEST_PLAN §5)","P0-T05, P0-T06, P0-T08","7 days logged",1.75,1.75,R,"In progress: started 2026-10-12",BP)
+t("P0-T12","0","Apply the research brightness curve to ~/.lighting/config.sh","Product / Backend (config)","RESEARCH_07 §3, the config file","P0-T05","Curve, BRIGHTNESS_MIN=0, LUMINANCE_COMPENSATION=0 and MONITOR_NITS 55/372 in config.sh; lightd restarted; sensor on the top bezel",0.25,0.25,R,"Done 2026-10-12 (`light update`)",NEW)
 t("P0-T13","0","Probe 08: brightness response + self-illumination (Q16)","Hardware","Dark room; sensor on the screen (Part A), then at the bezel (Part B)","P0-T12","RESULT Q16a (curve matches KitGuru, or a measured BRIGHTNESS_CURVE) and RESULT Q16b (negligible or significant)",0.5,1,R,"Optional",NEW)
 t("PM-01","0","Set weekly hours (Q15); re-baseline the schedule","Product","Your calendar","—","BUILD_PLAN totals converted to dates",0.5,1,R,"To do",NEW)
 t("PM-02","0","Decide the darkening-latency target (NFR-02: accept ~210 s or faster TAU_DOWN)","Product","SPEC NFR-02","—","NFR-02 and US-1 AC1 updated",0.25,0.5,R,"To do",NEW)
-t("PM-03","0","Close SPEC open questions as probes report (Q1–Q6, Q8, Q9, Q12, Q14)","Product","Probe results","P0-T01…P0-T09","SPEC §7 has an answer or a blocker for each",0.5,1,R,"To do",NEW)
+t("PM-03","0","Close SPEC open questions as probes report (Q1–Q6, Q8, Q9, Q12, Q14)","Product","Probe results","P0-T01…P0-T09","SPEC §7 has an answer or a blocker for each",0.5,1,R,"In progress: Q3, Q4, Q8 answered",NEW)
 t("PM-04","0","D0 review after 2 weeks: stop, or build the app; colorimeter","Product","Soak log, probe results","P0-T11","Decision written into BUILD_PLAN D0",1,2,R,"To do",NEW)
 
 # ── Phase 0b: bias light (Govee H6056) and desk light bar (Xiaomi) in the shell, now (added 2026-10-11)
@@ -181,6 +181,36 @@ L.append("- **Source:** `BUILD_PLAN` tasks keep their IDs and hours. Tasks marke
 L.append("- **Hours** are ranges for you learning Swift with AI pair-programming (BUILD_PLAN, \"How to read the estimates\").")
 L.append("- **Everyone is you.** One person holds every role, so the types are for planning your weeks (a design day, a hardware evening), not for handing work to other people.\n")
 
+def state(st):
+    if st.startswith("Done"): return "done"
+    if st.startswith("In progress"): return "in progress"
+    if st.startswith("Not needed"): return "not needed"
+    if st.startswith("Run;"): return "in progress"
+    if st.startswith("Optional") or st.startswith("Only if"): return "optional"
+    return "to do"
+MARKS = {"done": "✅ ", "in progress": "🔄 ", "not needed": "➖ ", "optional": "", "to do": ""}
+def mark(st): return MARKS[state(st)]
+
+L.append("## Progress\n")
+L.append("✅ done · 🔄 in progress · ➖ not needed. Everything else is to do or optional.\n")
+cnt = collections.Counter(state(r[10]) for r in T)
+L.append("| Done | In progress | Not needed | To do | Optional |\n|---|---|---|---|---|")
+L.append(f"| {cnt['done']} | {cnt['in progress']} | {cnt['not needed']} | {cnt['to do']} | {cnt['optional']} |\n")
+L.append("**Finished so far:**")
+for r in T:
+    if state(r[10]) == "done": L.append(f"- ✅ **{r[0]}** {r[2]}: {r[10][5:] if r[10].startswith('Done ') else r[10]}")
+L.append("\n**In progress:**")
+for r in T:
+    if state(r[10]) == "in progress": L.append(f"- 🔄 **{r[0]}** {r[2]}: {r[10]}")
+L.append("")
+L.append("Also done, outside these tasks:")
+L.append("- the shell prototype, the probe kit and the 127-check test suite;")
+L.append("- two review rounds (REVIEW_2026-09-26.md);")
+L.append("- RESEARCH_01–08, SPEC, BUILD_PLAN and TEST_PLAN;")
+L.append("- the first live hardware run and its fixes;")
+L.append("- `bin/light update`.")
+L.append("All of it is in `docs/lighting-app/` and `lighting-prototype/`.\n")
+
 L.append("## Summary\n")
 L.append("| Type | Core tasks (Phases 0, 0b, 1–6, 8) | Core hours | Optional hours |\n|---|---|---|---|")
 for k, (n, lo, hi, olo, ohi) in by.items():
@@ -211,7 +241,7 @@ for ph, title in PHASES.items():
     for r in rows:
         tag = " *(new)*" if r[11] == NEW else ""
         hrs = fmt(r[7]) if r[7] == r[8] else f"{fmt(r[7])}–{fmt(r[8])}"
-        L.append(f"| {r[0]}{tag} | {r[2]} | {r[3]} | {r[4] or '—'} | {r[5]} | {r[6]} | {hrs} | {r[9]} | {r[10]} |")
+        L.append(f"| {r[0]}{tag} | {r[2]} | {r[3]} | {r[4] or '—'} | {r[5]} | {r[6]} | {hrs} | {r[9]} | {mark(r[10])}{r[10]} |")
     L.append("")
 
 L.append("## Not on the board\n")
