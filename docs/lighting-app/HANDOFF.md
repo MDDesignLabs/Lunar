@@ -113,7 +113,7 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
 - **2026-10-13** (partial day, 12:00–14:xx):
   - **Working as designed:** brightness held at 0% below 50 lx; no brightness writes needed (already 0); Kelvin rose 5000→5250 K as lux reached ~20; no nudges; no sensor dropouts.
   - **Gain writes:** 7 per changing channel, all from restarts (update, reload, a manual restart). Each costs 2 (neutral on exit, warm on start). On a normal day expect ~2.
-  - **Open:** a midday reading of only ~5 lx is very low for daytime. Either the room was really that dark (blinds closed, no lamp), or the sensor isn't seeing the room (placement or facing). Asked the user. If it's placement, every value is skewed dim and warm.
+  - **Open:** a midday reading of only ~5 lx is very low for daytime. Either the room was really that dark (blinds closed, no lamp), or the sensor isn't seeing the room (placement or facing). **Answered:** the room has blackout blinds and is usually dark even by day, so the readings are real and the sensor placement is fine. The user mostly works in a dark room, so the dark end of the curve (0%, the ~55 cd/m² floor) matters most; watch for "still too bright at night" (RESEARCH_07 §4).
   - **Fixed:** the config clean-up was logged twice per update, because install.sh re-ran it.
 
 ## Bias light and light bar (2026-10-11)
