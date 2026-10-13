@@ -3,9 +3,9 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **131 checks, all passing**, against simulators (2026-10-11, after `light update` and the config migration, §10: 110 before, 97 before the RESEARCH_07 defaults and probe 08, 63 before the 2026-09-26 review fixes). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 130. The full run takes about 4 minutes. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
+- `lighting-prototype/test/run_tests.sh`: **180 checks, all passing**, against simulators (2026-10-13, after the bias light, §12: 131 before, after `light update` and the config migration, §10: 110 before that, 97 before the RESEARCH_07 defaults and probe 08, 63 before the 2026-09-26 review fixes). Two checks (discovery over real multicast, §3 and §12) print SKIP instead where the machine has no multicast route, so the total there is 178. Where 127.0.0.2 can't be bound (macOS without a loopback alias), §12 uses one fake light and skips three more discovery checks. The full run takes about 6 minutes. The §12 checks weren't mutation-tested. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
-  - a fake Govee strip on real UDP sockets (`test/fake_govee.py`);
+  - fake Govee lights on real UDP sockets (`test/fake_govee.py`: several addresses, a reply without `ip`, one that ignores multicast, a state model), and a fake TSL2591 on the wall that they light (`test/fake_wall_sensor.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
   - mock `m1ddc` and `lunar` binaries (`test/mocks/`).
 - Those tests prove logic, packet formats and probe plumbing. **They prove nothing about the real monitor.** The hardware tests in §3 do that.
@@ -151,13 +151,39 @@ Temp dirs, a temp bare repo and clone, a temp `HOME` (no git identity, no launch
 | I-U06 | Local commit + new upstream commit (diverged) | Stops with "diverged"; HEAD, stash list, the dirty edit and config.sh unchanged |
 | I-U07 | Remote unreachable | Fetch tried 3 times, then stops; HEAD unchanged |
 
-### Govee (P8)
+### Govee bias light (shell §3, §12; §12 added 2026-10-13, P0b)
 
-| ID | Case | Expected |
-|---|---|---|
-| I-G01 | Brightness / Kelvin packets | Exact JSON arrives on :4003 (shell §3) |
-| I-G02 | Discovery | Scan reply parsed from :4002 (shell §3) |
-| I-G03 | Two strips | Both addressed; sends don't block the loop (the `wait` bug found earlier) |
+§12 runs two fake lights on 127.0.0.2 and 127.0.0.3 (one ignores multicast and replies without `ip`). Where the loopback can't bind 127.0.0.2 (macOS without an alias) it uses one light on 127.0.0.1 and skips the three discovery checks; I-G06 prints SKIP where there's no multicast route.
+
+| ID | Case | Expected | FR |
+|---|---|---|---|
+| I-G01 | Brightness / Kelvin packets | Exact JSON arrives on :4003 (shell §3) | FR-60 |
+| I-G02 | Discovery | Scan reply parsed from :4002 (shell §3) | FR-60 |
+| I-G03 | Two lights | Both addressed with the same sequence; sends don't block the loop (the `wait` bug found earlier) | FR-60 |
+| I-G04 | Discovery joins 239.255.255.250 | "joined multicast group" before the scan | FR-60 |
+| I-G05 | A light that ignores multicast; a reply without `ip` | Found by the unicast scan to `GOVEE_IPS`; listed by the sender's address, with sku and device id | FR-60 |
+| I-G06 | Real multicast | The multicast light answers, the other doesn't (SKIP without a route) | FR-60 |
+| I-G07 | Off | `turn 0` twice to every light, nothing else | FR-64, FR-65 |
+| I-G08 | Back on | `turn 1` ×2, then brightness, then Kelvin | FR-64 |
+| I-G09 | Brightness range | 150 → 100, 0.3 → 1; over all of §3–§12, no brightness outside 1–100 is ever sent | FR-62 |
+| I-G10 | Kelvin clamp | 1500 → 2200, 9000 → 6500; the bars' K follows the screen target and is clamped (KELVIN_DIM 1800 → 2200) | FR-63 |
+| I-G11 | 2 s limit and coalescing | Changes within 2 s are held (pending), and the next tick sends only the latest; a target changing every 0.3 s gives ≤ 2 updates ≥ 2 s apart | FR-65 |
+| I-G12 | Change thresholds | < 100 K at the same % sends nothing; ≥ 100 K sends only `colorwc` | FR-65 |
+| I-G13 | 300 ms per device | Every datagram to one light ≥ 300 ms after the previous, across calls, and in the lightd run | FR-65 |
+| I-G14 | Refresh | Brightness + Kelvin, never `turn 1`; a light switched off elsewhere stays off; nothing refreshed while off | FR-66 |
+| I-G15 | Absolute level | 5 cd/m², ρ 0.80 → 19.6 lx → 3 % through `BIAS_CAL`; ρ 0.60 → 4 %; noisy/unsorted table; `BIAS_MAX` cap; ≥ 1 % when on; independent of screen brightness | FR-62 |
+| I-G16 | No calibration | Empty `BIAS_CAL` → `BIAS_FALLBACK_PCT` (5 %), "not calibrated" logged once | FR-62 |
+| I-G17 | Room hysteresis | 50 lx on, 70 off, 50 stays off, 30 on, 50 stays on; each switch logged | FR-64 |
+| I-G18 | Override | 6500 K at the calibrated level, also in a bright room; `BIAS_IN_CRITICAL=off` → off | FR-61 |
+| I-G19 | lightd start after a crash | Full on sequence though the state said on | FR-64 |
+| I-G20 | Display sleep / wake | `turn 0` ×2 within 5 s; nothing while asleep; on again at wake | FR-64 |
+| I-G21 | Clean exit | The last datagrams to each light are `turn 0` ×2 | FR-64 |
+| I-G22 | `GOVEE_IPS=""` | lightd and `light` send nothing, store no bias state, log nothing about it | FR-60 |
+| I-G23 | Config clean-up | `BIAS_K`, `MONITOR_NITS_*`, `BIAS_MIN` (any value) and `BIAS_MAX=40` removed; the measured `GOVEE_IPS`, `BIAS_WALL_RHO`, `BIAS_CAL` kept, even when equal to a default | FR-62 |
+| I-G24 | Probe 07 with lightd running | Refuses, sends nothing | — |
+| I-G25 | Probe 07 against the fakes | `RESULT Q7`, `Q17` (device count), `Q18`, `Q19`; lines for A–I and R; a `BIAS_CAL` line and its % | FR-60–FR-63 |
+| I-G26 | Probe 07 saving | `GOVEE_IPS` replaced in place, `BIAS_CAL` and `BIAS_WALL_RHO` appended, each with a dated comment; no other line touched; backup first; config clean-up keeps them | FR-62 |
+| I-G27 | Probe 07 exit | Each light back as found; no Kelvin outside the probe's own list | — |
 
 ---
 
@@ -172,7 +198,7 @@ Temp dirs, a temp bare repo and clone, a temp `HOME` (no git identity, no launch
 | 04 single write | Q1 | NFR-04 (double send halves the wear budget) |
 | 05 gain domain | Q3, Q4, Q10 | FR-21 table, FR-12 `GAIN_GAMMA`, US-2 |
 | 06 Part A | Q5 | FR-50/51 (is reapply-after-wake needed?) |
-| 07 Govee | Q7 | FR-60/61 |
+| 07 Govee (checks A–I + ρ) | Q7, Q17, Q18, Q19 | FR-60–FR-66 |
 | 08 brightness (optional) | Q16 (a: does the unit follow KitGuru's table, b: does the screen light the sensor) | FR-10 curve (RESEARCH_07) |
 | install + log | Q8 | NFR-07 |
 
@@ -256,12 +282,12 @@ Run it before each phase gate. Record pass/fail and write counts.
 | FR-51 | — | I-D11 | M-02 |
 | FR-52 | — | — | M-04 |
 | FR-53 | — | — | M-03 |
-| FR-60/61 | — | I-G01–G03; planned: discovery joins the multicast group, unicast scan, sender-address fallback | probe 07 (checks A–I, RESEARCH_08) |
-| FR-62 | planned: wall-nits → % inversion through `BIAS_CAL` | — | probe 07 check F (wall calibration) |
-| FR-63 | planned: Kelvin clamped to 2200–6500 | planned: no out-of-range `colorTemInKelvin` sent | — |
-| FR-64 | — | planned: `turn 0` above `BIAS_OFF_LUX`, on display sleep, on clean exit | M-01, M-02 (bias off while asleep) |
-| FR-65/66 | — | planned: ≤ 1 update per 2 s, coalescing, refresh without `turn 1` | soak |
-| FR-67 | — | planned: "not responding" after 3 missed `devStatus` | unplug the bars |
+| FR-60/61 | — | I-G01–G08, I-G18, I-G22, I-G25 | probe 07 (checks A–I, RESEARCH_08) |
+| FR-62 | I-G15, I-G16 (shell `engine.awk` `biaspct`) | I-G09, I-G23, I-G26 | probe 07 checks F and R (wall calibration, ρ) |
+| FR-63 | I-G10 | I-G10 | probe 07 check C |
+| FR-64 | I-G17 | I-G07, I-G08, I-G19–I-G21 | M-01, M-02 (bias off while asleep). Mac sleep without display sleep first: shell can't (no pre-sleep hook) |
+| FR-65/66 | — | I-G11–I-G14 | soak; probe 07 checks B (does brightness switch an off bar on?) and G (gaps) |
+| FR-67 | — | planned (not in the shell): "not responding" after 3 missed `devStatus` | unplug the bars |
 | FR-80 | — | planned: no light-bar command without a yes, in any code path | code review + M-16 |
 | FR-81/82/85 | planned: ask/suppress/withdraw state machine (lux, time, evening window) | — | M-16: an evening at < 5 lx for 10 min gives exactly one prompt |
 | FR-83/84/86 | — | planned: remote-only sends nothing; a controllable model sends exactly one command | — |
@@ -285,7 +311,7 @@ Run it before each phase gate. Record pass/fail and write counts.
 | US-4 Nudge | FR-11 | U-N*, soak |
 | US-5 Safe by default | FR-41, FR-42, NFR-04, NFR-05 | I-D01–D07, soak |
 | US-6 No fights | FR-40 | I-D08, I-D09, I-D20, M-11 |
-| US-7 Bias light (deferred) | FR-60, FR-61 | I-G*, probe 07 |
+| US-7 Bias light | FR-60–FR-67 | I-G01–I-G27, probe 07, soak (P0b-T08) |
 
 ---
 
@@ -294,7 +320,6 @@ Run it before each phase gate. Record pass/fail and write counts.
 - **A UI snapshot test suite.** One user; manual QA covers it.
 - **Performance benchmarks** beyond the NFR-03 snapshot.
 - **Multi-display, Intel, or any other monitor.**
-- **Govee** before a strip exists.
 
 ---
 

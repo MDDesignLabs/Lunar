@@ -8,7 +8,7 @@ For a Claude session running **on the user's Mac** (Desktop app or `claude remot
 
 - **Hardware:** Mac Studio (Apple Silicon), macOS 26.7; AOC CU34G4Z; ESP32 + TSL2591 at `lunarsensor.local` (192.168.0.163, currently reading ~23 lx).
 - **Lunar:** the Pro licence was an **expired demo**, so Sensor Mode is disabled and `lunar lux` returns `-1.0`. Lunar is out of the loop.
-- **Configuration:** `BACKEND=m1ddc`, `LUX_SOURCE=direct`. Govee bars aren't bought yet, so `GOVEE_IPS=""` and probe 07 is skipped.
+- **Configuration:** `BACKEND=m1ddc`, `LUX_SOURCE=direct`. `GOVEE_IPS=""` until probe 07 saves the bars' addresses (below).
 - **Monitor OSD:** User mode, R/G/B = 50/50/50. The baseline equals neutral.
 - **Already built by probe 00:** m1ddc (stock) and m1ddc-1x. The Xcode licence has been accepted. The Command Line Tools are installed.
 - **Wi-Fi:** the ESP32 shows about 33% ping loss and 160–270 ms round trips, probably ESPHome's Wi-Fi power saving. Probe 02 will show whether the event stream itself drops out.
@@ -117,6 +117,15 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
   - **Later, blackout opened (14:39–14:48):** the room rose to 40–70 lx. Kelvin went to 6500 K, then settled at 6000 K. Brightness wrote 2, 100, 18, 1, 3, 16, 22 and 6, each ≥ 60 s apart. The 100 was the user's phone torch held on the sensor as a test, so it was the correct response, not a fault. No change needed; TAU_UP stays 8 s.
   - **Fixed:** the config clean-up was logged twice per update, because install.sh re-ran it.
 
+## Govee arrived (2026-10-13)
+
+The H6056 bars are here. The shell fixes are in (P0b-T02, T03, T05, T06; untested on hardware). The user's steps, in order:
+- **Govee Home app:** add both bars on **2.4 GHz** Wi-Fi; each light → Settings → **LAN Control** on (it can take minutes to show). Note the model on the box (Q17). Reserve the bars' IPs on the router.
+- `git pull` (or `bin/light update`), then **stop lightd**: `launchctl bootout gui/$(id -u)/com.lighting.lightd`.
+- **Run `bash lighting-prototype/probe/07-govee.sh`** (≈ 30 min). Before checks E, F and R: room dark, the TSL2591 flat on the wall behind the monitor; a sheet of white paper for the ρ check; the phone for check I. Say "y" to saving `GOVEE_IPS`, `BIAS_CAL` and `BIAS_WALL_RHO`.
+- Paste `probe/results/07-govee.txt` (the `RESULT Q7/Q17/Q18/Q19` lines) for review: watch check B ("brightness switches an off bar on"), check E (white path) and the % check F lands on.
+- Start lightd again (`./install.sh`, or `bin/lightd` in Terminal), check `bin/light status` shows `bias: on …`, then add the bias lines to the soak (P0b-T08).
+
 ## Bias light and light bar (2026-10-11)
 
 - **Govee:** the user bought what RESEARCH_08 identifies as the H6056 "Flow Plus" bars; confirm on the box. Plan in BUILD_PLAN Phase 0b. The order is:
@@ -125,7 +134,7 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
   3. Make the prototype fixes: turn-off support, an absolute 5 cd/m² wall target, a Kelvin clamp, and discovery.
   4. Calibrate the wall, then soak.
 
-  Keep `GOVEE_IPS=""` until the fixes land; the current code can't turn the bars off.
+  *Update 2026-10-13:* the fixes have landed (see "Govee arrived" above), so step 3 is done in code and the order is now app → probe 07 → soak.
 - **Xiaomi light bar:** ask the user to read the model number on the label (Q20). The app only ever **asks**; it never switches the bar by itself (FR-80). Most likely it's remote-only, so the prompt is a reminder.
 
 ## Brightness curve (2026-10-11)

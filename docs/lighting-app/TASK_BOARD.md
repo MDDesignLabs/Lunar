@@ -28,7 +28,7 @@ A type like "Backend / Frontend" means both; the first one is the main kind of w
 
 | Done | In progress | Not needed | To do | Optional |
 |---|---|---|---|---|
-| 5 | 3 | 1 | 71 | 8 |
+| 9 | 3 | 1 | 67 | 8 |
 
 **Finished so far:**
 - ✅ **P0-T03** Probe 05: gain domain (Q3, Q4): 2026-10-11: linear light, no headroom
@@ -36,6 +36,10 @@ A type like "Backend / Frontend" means both; the first one is the main kind of w
 - ✅ **P0-T05** Write `~/.lighting/config.sh` from the results: 2026-10-12: measured gains + research curve are repo defaults (`light update`); M1DDC waits on probe 04
 - ✅ **P0-T06** Install lightd; test Local Network as an agent (Q8): 2026-10-11: works under launchd, also after a reboot
 - ✅ **P0-T12** Apply the research brightness curve to ~/.lighting/config.sh: 2026-10-12 (`light update`)
+- ✅ **P0b-T02** Prototype Govee fixes: turn-off, Kelvin clamp 2200–6500, multicast join + unicast scan, sender address when `ip` is missing, `govee status`/`off-all`: 2026-10-13 (code; untested on hardware)
+- ✅ **P0b-T03** Extend probe 07 to checks A–I (R08 §5): 2026-10-13 (code; untested on hardware)
+- ✅ **P0b-T05** Absolute bias level: BIAS_TARGET_NITS + BIAS_WALL_RHO + BIAS_CAL replace BIAS_K; calibrate to 5 cd/m²: 2026-10-13 (code; untested on hardware)
+- ✅ **P0b-T06** Bias colour and off states: follow screen K, 6500 K override, off for display sleep, clean stop, bright room; pre-sleep hook: 2026-10-13 (code; untested on hardware)
 
 **In progress:**
 - 🔄 **P0-T01** Report probe 03 and 04 results: Run; results not reported
@@ -111,11 +115,11 @@ That's 36–86 h of hands-on work end to end (computed from the dependencies), p
 | ID | Task | Type | Requires | Depends on | Done when | Hours | Difficulty | Status |
 |---|---|---|---|---|---|---|---|---|
 | P0b-T01 | Govee setup: confirm the model (Q17), 2.4 GHz Wi-Fi, LAN Control on per light, DHCP reservations | Hardware | Govee Home app, router admin | — | Model in SPEC Q17; LAN Control on; IPs reserved and in GOVEE_IPS | 0.25–1 | routine | To do |
-| P0b-T02 | Prototype Govee fixes: turn-off, Kelvin clamp 2200–6500, multicast join + unicast scan, sender address when `ip` is missing, `govee status`/`off-all` | Backend | lib/govee.sh, test/fake_govee.py | — | New tests pass for each fix | 3–6 | needs research | To do |
-| P0b-T03 | Extend probe 07 to checks A–I (R08 §5) | Hardware / Backend | probe/07-govee.sh | P0b-T02 | Writes RESULT Q7, Q17, Q18 and a BIAS_CAL line | 1.5–3 | routine | To do |
+| P0b-T02 | Prototype Govee fixes: turn-off, Kelvin clamp 2200–6500, multicast join + unicast scan, sender address when `ip` is missing, `govee status`/`off-all` | Backend | lib/govee.sh, test/fake_govee.py | — | New tests pass for each fix | 3–6 | needs research | ✅ Done 2026-10-13 (code; untested on hardware) |
+| P0b-T03 | Extend probe 07 to checks A–I (R08 §5) | Hardware / Backend | probe/07-govee.sh | P0b-T02 | Writes RESULT Q7, Q17, Q18 and a BIAS_CAL line | 1.5–3 | routine | ✅ Done 2026-10-13 (code; untested on hardware) |
 | P0b-T04 | Run probe 07 on the bars (was P8-T01) | Hardware | Dark room, sensor at the wall | P0b-T01, P0b-T03 | Q7, Q17, Q18, Q19 answered or blocked with evidence | 1–2 | needs research | To do |
-| P0b-T05 | Absolute bias level: BIAS_TARGET_NITS + BIAS_WALL_RHO + BIAS_CAL replace BIAS_K; calibrate to 5 cd/m² | Backend (config) / Hardware | Probe 07 check F, white paper for ρ | P0b-T04 | Wall reads π·5/ρ lx ± 10 % at night (US-7 AC1) | 2–4 | needs research | To do |
-| P0b-T06 | Bias colour and off states: follow screen K, 6500 K override, off for display sleep, clean stop, bright room; pre-sleep hook | Backend | lightd, sleepwatcher or the display-state helper | P0b-T02 | US-7 AC2, AC3, AC5 on hardware | 2–5 | needs research | To do |
+| P0b-T05 | Absolute bias level: BIAS_TARGET_NITS + BIAS_WALL_RHO + BIAS_CAL replace BIAS_K; calibrate to 5 cd/m² | Backend (config) / Hardware | Probe 07 check F, white paper for ρ | P0b-T04 | Wall reads π·5/ρ lx ± 10 % at night (US-7 AC1) | 2–4 | needs research | ✅ Done 2026-10-13 (code; untested on hardware) |
+| P0b-T06 | Bias colour and off states: follow screen K, 6500 K override, off for display sleep, clean stop, bright room; pre-sleep hook | Backend | lightd, sleepwatcher or the display-state helper | P0b-T02 | US-7 AC2, AC3, AC5 on hardware | 2–5 | needs research | ✅ Done 2026-10-13 (code; untested on hardware) |
 | P0b-T07 | BIAS_OFF_LUX (Q22): wall vs bezel lux at 4 times of day | Hardware | The sensor, moved between wall and bezel | P0b-T05 | BIAS_OFF_LUX/BIAS_ON_LUX set; Q22 answered | 0.5–1 | routine | To do |
 | P0b-T08 | Bias soak, 7 days, with the shell soak | QA | Soak checklist + bias lines | P0b-T05, P0b-T06 | 7 days: off by day, on at night, off after sleep, never stuck on | 0.5–1 | routine | To do |
 | PM-08 *(new)* | D0b: keep the Govee for everything, or add a fixed high-CRI D65 strip for colour-critical work | Product | Probe 07 results (A, B, C, E, F, I) | P0b-T04 | Decision written into BUILD_PLAN D0b | 0.25–0.5 | routine | To do |

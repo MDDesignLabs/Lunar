@@ -81,17 +81,23 @@ Source tags: [G#] Govee/standards, [X#] Xiaomi/Apple (§8). [R05], [R07] are loc
 
 ---
 
-## 4. Planned prototype changes (not yet written)
+## 4. Prototype changes
 
-| Change | Why |
-|---|---|
-| **Turn-off support:** on/off in `govee_apply`'s cache; `turn 0` for off states, `turn 1` before brightness when coming back | Today the bars can never go off: no `turn`, and bias is clamped ≥ `BIAS_MIN` |
-| **Absolute level:** replace `BIAS_K` with `BIAS_TARGET_NITS=5`, `BIAS_WALL_RHO`, and a measured `BIAS_CAL="pct:lux,…"` table, inverted for E = πL/ρ; `BIAS_MAX` ≈ 15 % safety cap | §2 |
-| **Kelvin clamp:** `GOVEE_K_MIN=2200`, `GOVEE_K_MAX=6500` | Unclamped K is sent today |
-| **Discovery:** multicast join (`IP_ADD_MEMBERSHIP`) plus unicast scans to `GOVEE_IPS:4001` | Guide [G9]; multicast is fragile on Wi-Fi [R05] |
-| **Source address** when the reply has no `ip` | Seen on other models [G13] |
-| **Pre-sleep off hook** (sleepwatcher or the display-state helper), plus off in the display-asleep branch and `cleanup` | lightd sees Mac sleep only after waking, by a sample gap |
-| `bin/govee status` and `off-all` | Probe and debugging |
+Status 2026-10-13: written and tested against `test/fake_govee.py` (two fake lights, a reply without `ip`, one that ignores multicast) and `test/fake_wall_sensor.py`. **Still untested on the real bars** (P0b-T04).
+
+| Change | Why | Status |
+|---|---|---|
+| **Turn-off support:** on/off in `govee_apply`'s cache; `turn 0` for off states, `turn 1` before brightness when coming back | Before, the bars could never go off: no `turn`, and bias was clamped ≥ `BIAS_MIN` | **Done.** Level 0 = `turn 0`; brightness sent is always 1–100; transitions sent twice, 300 ms apart |
+| **Absolute level:** replace `BIAS_K` with `BIAS_TARGET_NITS=5`, `BIAS_WALL_RHO`, and a measured `BIAS_CAL="pct:lux,…"` table, inverted for E = πL/ρ; `BIAS_MAX` ≈ 15 % safety cap | §2 | **Done** (`engine.awk` `bias_pct`). Empty `BIAS_CAL` → `BIAS_FALLBACK_PCT=5` (UNVERIFIED), logged once. `BIAS_K`, `BIAS_MIN`, `MONITOR_NITS_*` retired (config clean-up removes them) |
+| **Kelvin clamp:** `GOVEE_K_MIN=2200`, `GOVEE_K_MAX=6500` | Unclamped K was sent | **Done** in `govee_apply` (every lightd/`light` path). `bin/govee kelvin` stays raw, for probe 07 check C |
+| **Colour and states** (§3): screen K in adaptive, 6500 K in the override (`BIAS_IN_CRITICAL=off` → off), off above `BIAS_OFF_LUX` / on below `BIAS_ON_LUX`, off on display sleep and clean exit | §3 | **Done.** The override keeps the bars on in a bright room (§3's table) |
+| **Rate limits** (§3): coalescing, ≥ 1 % / ≥ 100 K, ≤ 1 update per 2 s, ≥ 300 ms per device, 60 s refresh without `turn 1` | §3 | **Done.** Nothing is refreshed while off. Whether `brightness` switches on a bar that's off is check B; if it does, the refresh would too |
+| **Discovery:** multicast join (`IP_ADD_MEMBERSHIP`) plus unicast scans to `GOVEE_IPS:4001` | Guide [G9]; multicast is fragile on Wi-Fi [R05] | **Done** (`lib/govee_udp.py`) |
+| **Source address** when the reply has no `ip` | Seen on other models [G13] | **Done** |
+| **Pre-sleep off hook** (sleepwatcher or the display-state helper), plus off in the display-asleep branch and `cleanup` | lightd sees Mac sleep only after waking, by a sample gap | **Shell: display-sleep only.** Off in the display-asleep branch and in `cleanup` is done; there's **no pre-sleep hook**, so a Mac sleep without a display sleep first (Apple menu → Sleep, lid) leaves the bars on until wake. The app does it with `NSWorkspace.willSleepNotification` (P8-T03) |
+| `bin/govee status` and `off-all` | Probe and debugging | **Done** (`discover` also prints ip, sku, device id) |
+| FR-67 reachability ("not responding" after 3 missed `devStatus`) | SPEC | **Not done** in the shell (not in P0b) |
+| Probe 07 checks A–I (§5), plus the ρ check | P0b-T03 | **Done.** Offers to save `GOVEE_IPS`, `BIAS_CAL`, `BIAS_WALL_RHO`; writes `RESULT Q7`, `Q17`, `Q18`, `Q19` |
 
 ---
 

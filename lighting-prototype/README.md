@@ -7,8 +7,8 @@ The verdict (how much of the app this delivers, and whether to build the Swift a
 ```
 bin/lightd      adaptive loop (lux → filter → targets → rate-limited DDC + Govee). Runs under launchd
 bin/light       one-shot control: critical on|off|toggle · kelvin <K> · neutral · bias · status · writes · update
-bin/govee       Govee LAN API from the shell: discover · on/off · brightness · kelvin · rgb · raw
-lib/            engine.awk (pure maths) · ddc.sh (write scheduler) · govee.sh · apply.sh · common.sh · config_migrate.sh · update.sh
+bin/govee       Govee LAN API from the shell: discover · status · off-all · on/off · brightness · kelvin · rgb · raw
+lib/            engine.awk (pure maths) · ddc.sh (write scheduler) · govee.sh + govee_udp.py (bias light) · apply.sh · common.sh · config_migrate.sh · update.sh
 probe/          hardware measurements: run these first, on the Mac
 swiftbar/       menu bar UI via SwiftBar (open source)
 test/           simulators + test suite (runs anywhere: `test/run_tests.sh`)
@@ -17,6 +17,7 @@ test/           simulators + test suite (runs anywhere: `test/run_tests.sh`)
 Dependencies:
 
 - macOS's own bash 3.2, awk, curl, nc and perl.
+- python3 (comes with the Command Line Tools) for the Govee sockets (`lib/govee_udp.py`) and the probes. Without it, Govee sends fall back to nc and discovery hears one light only.
 - m1ddc, built by `probe/00-setup.sh`, only for the `m1ddc` backend and the probes.
 - The Lunar CLI, only for the `lunar` backend.
 - SwiftBar, optional.
@@ -34,7 +35,7 @@ Run these in Terminal, in order. Each writes `probe/results/NN-*.txt` ending in 
 | `probe/04-single-write.sh` | **Q1:** does the AOC need every write sent twice? | Lunar quit | 2–5 min |
 | `probe/05-gain-domain.sh` | **Q3:** linear-light or gamma-encoded gain? **Q4b:** headroom above 50? Prints what your gain rows *really* produce and a corrected `GAIN_TABLE`. The screen stays white ~16 min; click it to abort (the probe stops and restores the monitor) | Lunar quit, dark room, sensor taped to the screen | 16 min |
 | `probe/06-persistence.sh` | **Q5:** what resets gains (sleep, input)? Part B (pulling the power cord) runs only with `--with-power-cut`, and is skipped for this setup | Lunar quit | 10 min |
-| `probe/07-govee.sh` | **Q7:** discovery, port 4003 commands, Kelvin range | LAN Control on in the Govee app | 3 min |
+| `probe/07-govee.sh` | **Q7, Q17, Q18, Q19:** checks A–I of RESEARCH_08 §5: discovery and device count, turn/brightness, Kelvin range, `devStatus`, white path (WW chips or RGB), the wall calibration (`BIAS_CAL`), wall reflectance ρ, packet gaps, Matter, flicker. Offers to save `GOVEE_IPS`, `BIAS_CAL` and `BIAS_WALL_RHO` to your config (backup first, dated comment). `--only FR` runs some checks; check F resumes if stopped. Puts the bars back as it found them | LAN Control on in the Govee app; lightd stopped; dark room and the TSL2591 on the wall for E, F, R | 30 min |
 | `probe/08-brightness.sh` | **Q16 (optional, after a few days on the new curve):** Part A maps the brightness setting to light and compares it with KitGuru's review of this model; prints a `BRIGHTNESS_CURVE` from your own measurements. Part B checks the screen isn't lighting the sensor at its everyday spot. `--part-a-only` / `--part-b-only` skip a part. The screen stays white ~6 min, then ~1 min; click it to abort (the probe restores the monitor). At most 30 m1ddc writes | Lunar quit, dark room; sensor on the screen (A), then at the bezel (B) | 7 min |
 
 How probe 05 works without a colorimeter:
@@ -73,6 +74,14 @@ tail -f ~/.lighting/lightd.log ~/.lighting/writes.log
 
 The override bypasses the intervals, never the caps or the no-op check.
 
+## Bias light setup (Govee H6056)
+
+1. **Govee Home app:** add both bars on **2.4 GHz** Wi-Fi, then each light → Settings → **LAN Control** on (the switch can take minutes to appear). Reserve their IPs in your router.
+2. **Stop lightd**, then run `probe/07-govee.sh`. Answer "y" to save `GOVEE_IPS` (check A), `BIAS_CAL` (check F) and `BIAS_WALL_RHO` (the ρ check).
+3. **Done:** restart lightd (`launchctl kickstart -k gui/$(id -u)/com.lighting.lightd`). `bin/light status` shows a `bias:` line.
+
+What lightd then does (SPEC FR-60–FR-66, RESEARCH_08 §3): the bars light the wall to `BIAS_TARGET_NITS` (5 cd/m²) at the screen's Kelvin (clamped 2200–6500), 6500 K in colour-critical, and go **off** above `BIAS_OFF_LUX` (60 lx, back on below 40), when the display sleeps and when lightd stops. Until `BIAS_CAL` is measured they run at `BIAS_FALLBACK_PCT` (5 %, a guess). **Limit:** the shell has no pre-sleep hook, so a Mac sleep that isn't preceded by a display sleep (Apple menu → Sleep, closing the lid) leaves the bars on until wake. `GOVEE_IPS=""` turns all of it off.
+
 ## Updating
 
 ```bash
@@ -103,7 +112,7 @@ ln -s "$PWD/swiftbar/lighting.10s.sh" ~/SwiftBarPlugins/      # or whichever fol
 
 ## 4. Known limits (all tested against simulators only)
 
-- **Real hardware so far (2026-10-11):** the AOC and the ESP32 have run with lightd, under launchd and after a reboot. Probe 05 has run. The Govee bars haven't (none bought). `test/run_tests.sh` proves the logic, packet formats, rate limits and probe analysis against simulators: 127 checks, all passing (126 plus one SKIP on a machine with no multicast route). The probes are what prove the hardware.
+- **Real hardware so far (2026-10-11):** the AOC and the ESP32 have run with lightd, under launchd and after a reboot. Probe 05 has run. The Govee bars arrived 2026-10-13; nothing has run on them yet (the bias code is tested against fakes only). `test/run_tests.sh` proves the logic, packet formats, rate limits and probe analysis against simulators: 180 checks, all passing (178 plus two SKIPs on a machine with no multicast route). The probes are what prove the hardware.
 - **Local Network privacy (macOS 15+) may block `curl`/`nc` when started by launchd.** Apple's TN3179 exempts tools run from Terminal and launchd *daemons*, but says launchd *agents* (how `install.sh` runs `lightd`) are not exempt (docs/lighting-app/RESEARCH_04 §2). After installing, check that lux updates (`bin/light status`, twice); if it doesn't, run `bin/lightd` from Terminal instead. **On the author's Mac (macOS 26.7) the agent was not blocked** (2026-10-11); why is unverified, and a macOS update could change it. `LUX_SOURCE=lunar` sidesteps it for the sensor, because Lunar already has the permission. Govee UDP may still be blocked. If `lightd.log` shows Govee sends but the strips don't react under launchd while `bin/govee` works from Terminal, this is why.
 - `lunar lux --listen` only emits when the value changes. In a perfectly steady room that looks like a stale sensor, and `lightd` reconnects every `STALE_SECS`. That's why the default `STALE_SECS` is 300; with `LUX_SOURCE=sse`, 60 is enough.
 - **Daily write caps also bound the override, with a reserve.** Adaptive writes stop at `BRIGHTNESS_DAILY_CAP` / `GAIN_DAILY_CAP`. Writes back to neutral (the override, neutral on exit or after a crash) may use `OVERRIDE_RESERVE` more per channel. If even that is used up, or another DDC app is running, `light critical on` exits 1 and says why, and the menu bar shows "NOT neutral" instead of the override icon.
