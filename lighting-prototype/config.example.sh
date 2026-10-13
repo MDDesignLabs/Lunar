@@ -34,6 +34,7 @@ LUX_DEADBAND=0.04                 # log10 units (~10%) before anything is recomp
 # ── Sleep and wake ─────────────────────────────────────────────────────────
 WAKE_GAP=90                       # seconds without a sample that may mean the Mac slept
 WAKE_DELAY=8                      # after a wake, wait this long before touching DDC
+SAMPLE_LOG_SECS=300               # lightd records lux and targets this often, for `light report`
 
 # ── Brightness (m1ddc backend only; with Lunar, Lunar's own curve is used) ─
 # lux:brightness% pairs, interpolated linearly in log10(lux).

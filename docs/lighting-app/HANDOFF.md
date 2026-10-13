@@ -95,6 +95,20 @@ git stash push -m "before first light update" && git pull --ff-only && lighting-
 ```
 After that, `bin/light update` is the only command needed. It trims `~/.lighting/config.sh` to personal overrides (with a dated backup), so the research curve, `BRIGHTNESS_MIN=0`, compensation off and the measured gain table come from the repo. The stash holds the old local edits; nothing deletes it.
 
+## Daily review (from 2026-10-13)
+
+- Each evening the user pastes `lighting-prototype/bin/light report`. Its output covers:
+  - the config in effect;
+  - an hourly table of lux, brightness sent, Kelvin and nudge, from lightd's 5-minute `samples-YYYY-MM-DD.csv`, kept 30 days;
+  - the day's monitor writes, with brightness changes timed;
+  - the day's events, including every nudge (logged as `user:`).
+- Check it against RESEARCH_07's targets:
+  - brightness at 0% only below ~10 lx;
+  - no hunting (writes ≥ 60 s apart, and well under the caps);
+  - nudges: two or more a day in the same lux range means the curve is wrong there;
+  - Kelvin only stepping slowly.
+- Propose changes as new repo defaults, so the user gets them with `bin/light update` and never hand-edits config.sh.
+
 ## Bias light and light bar (2026-10-11)
 
 - **Govee:** the user bought what RESEARCH_08 identifies as the H6056 "Flow Plus" bars; confirm on the box. Plan in BUILD_PLAN Phase 0b. The order is:

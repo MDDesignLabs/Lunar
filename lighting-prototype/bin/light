@@ -10,6 +10,7 @@
 #   light bias <pct> [K]           drive the Govee strips directly
 #   light status                   mode, lux, targets, today's write counts
 #   light writes [n]               last n DDC writes (default 20)
+#   light report [YYYY-MM-DD]      one day's summary (lux, brightness, colour, events) to paste for review
 #   light update                   git pull (fast-forward only; local edits stashed, never lost),
 #                                  clean ~/.lighting/config.sh down to your overrides (backup first),
 #                                  reload lightd if it runs under launchd. New defaults just arrive
@@ -84,6 +85,7 @@ case "$1" in
         [ "$new" -gt 50 ] && new=50; [ "$new" -lt -50 ] && new=-50
         state_set bright_offset "$new"
         state_set bright_offset_lf "$(lf_now)"
+        log "user: $1 ${2:-} → brightness offset $new (lux $(state_get lux '?'))"
         apply_targets "$(lf_now)" 1
         echo "brightness offset ${new} → $(state_get last_brightness '?')"
         ;;
@@ -100,6 +102,7 @@ case "$1" in
             | grep -E '^(red|green|blue)=')"
         ddc_gains "$red" "$green" "$blue" 1 || { echo "not written: $(gain_rc_reason $?)" >&2; exit 1; }
         [ "$2" -lt "${KELVIN_FLOOR:-0}" ] && echo "(${2}K is below KELVIN_FLOOR; used ${KELVIN_FLOOR}K)"
+        log "user: kelvin ${2}K → gains $red/$green/$blue (lux $(state_get lux '?'))"
         echo "gains for ${2}K: $red/$green/$blue"
         ;;
     neutral)
@@ -121,6 +124,9 @@ case "$1" in
         printf 'today:     '
         for k in brightness red green blue; do printf '%s=%s ' "$k" "$(state_get "count_$(today)_$k" 0)"; done
         echo "(caps: brightness $BRIGHTNESS_DAILY_CAP, gains $GAIN_DAILY_CAP each)"
+        ;;
+    report)
+        . "$PROTO_DIR/lib/report.sh"; light_report "$2"
         ;;
     writes)
         tail -n "${2:-20}" "$LIGHT_HOME/writes.log" 2>/dev/null || echo "no writes yet"

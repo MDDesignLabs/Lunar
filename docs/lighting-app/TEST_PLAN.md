@@ -3,7 +3,7 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **127 checks, all passing**, against simulators (2026-10-11, after `light update` and the config migration, §10: 110 before, 97 before the RESEARCH_07 defaults and probe 08, 63 before the 2026-09-26 review fixes). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 126. The full run takes about 4 minutes. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
+- `lighting-prototype/test/run_tests.sh`: **131 checks, all passing**, against simulators (2026-10-11, after `light update` and the config migration, §10: 110 before, 97 before the RESEARCH_07 defaults and probe 08, 63 before the 2026-09-26 review fixes). One check (discovery over real multicast) prints SKIP instead where the machine has no multicast route, so the total there is 130. The full run takes about 4 minutes. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
   - a fake Govee strip on real UDP sockets (`test/fake_govee.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
@@ -102,6 +102,7 @@ Only some of these have a shell check today (marked "shell §N"). The rest are s
 | I-D18 | Override on at start, sensor offline | Neutral written before any lux sample (shell §9) |
 | I-D19 | Previous run didn't exit cleanly | Neutral written first (shell §9) |
 | I-D20 | `BACKEND=lunar` | Lunar running is expected; BetterDisplay or MonitorControl alongside it is refused (shell §9) |
+| I-R01 | lightd's 5-minute samples and `light report` (§11) | Samples file with rows; report shows config, hourly table, write counts, events and the nudge count; a malformed date is rejected |
 
 ### SSE client (P3)
 

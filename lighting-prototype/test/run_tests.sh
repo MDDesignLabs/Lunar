@@ -469,6 +469,7 @@ check "with BACKEND=lunar, Lunar running is expected (not a rival): the write go
 cp "$(command -v sleep)" "$FAKEAPP2/FakeDDCApp"; "$FAKEAPP2/FakeDDCApp" 30 & LP2=$!; PIDS="$PIDS $LP2"; sleep 0.3
 ddc_brightness 56 1; rc=$?
 check "…but another DDC app alongside Lunar is refused (rc 4)" "[ $rc = 4 ]"
+kill $LP $LP2 2>/dev/null; wait $LP $LP2 2>/dev/null   # later sections must not see a "DDC app" running
 
 echo "── 10. Config migration, lightd's stale-config warning, bin/light update (temp dirs and repos only)"
 SEED="0:21,13:31,23:34,39:39,71:41,80:44,100:45,135:47,160:49,190:54,224:58,313:69,565:91,702:99,800:100,1000:100"
@@ -577,6 +578,21 @@ check "a fetch that keeps failing is tried 3 times, then stops with nothing chan
 
 check "the suite left the real probe/results folder (your hardware data) untouched" \
     "[ \"\$(real_results)\" = \"\$REAL_RESULTS_BEFORE\" ]"
+
+echo "── 11. Daily report: lightd's 5-minute samples and \`light report\`"
+fresh "GOVEE_IPS= SAMPLE_LOG_SECS=1 SENSOR_URL=http://127.0.0.1:18096/events"
+python3 test/fake_sensor.py 18096 0.2 300 300 300 100 30 10 5 5 5 5 5 5 5 5 5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 4
+bin/light brighter >/dev/null
+sleep 1; kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+SF="$LIGHT_HOME/samples-$(date +%Y-%m-%d).csv"
+check "lightd records lux and targets for the report (samples-<date>.csv, several rows)" \
+    "[ -f \"$SF\" ] && [ \$(( \$(wc -l < \"$SF\") - 1 )) -ge 2 ] && head -1 \"$SF\" | grep -q '^time,lux,display,mode,target_brightness'" "$(head -3 "$SF" 2>/dev/null)"
+rep="$(bin/light report 2>&1)"
+check "light report prints the config, an hourly row, the write counts and the events" \
+    "echo \"\$rep\" | grep -q '== Lighting report for' && echo \"\$rep\" | grep -q '^  [0-2][0-9]:00 ' && echo \"\$rep\" | grep -q 'brightness [1-9][0-9]*, red' && echo \"\$rep\" | grep -q 'lightd start'" "$(echo "$rep" | head -20)"
+check "…and counts your nudges (light brighter is logged as a user action)" "echo \"\$rep\" | grep -q '(1 nudges or manual changes by you)'"
+check "light report rejects a malformed date" "! bin/light report 12-10-2026 >/dev/null 2>&1"
 
 echo
 echo "$PASS passed, $FAIL failed"

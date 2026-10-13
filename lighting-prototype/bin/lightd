@@ -87,6 +87,22 @@ log "lightd start: backend=$BACKEND lux=$LUX_SOURCE mode=$(current_mode)"
 . "$PROTO_DIR/lib/config_migrate.sh"
 for k in $(config_stale_keys); do log "config.sh overrides $k with an old value; run bin/light update"; done
 
+# One row every SAMPLE_LOG_SECS into samples-YYYY-MM-DD.csv, for `light report` (kept 30 days).
+last_sample_t=0
+sample_log() {  # sample_log <display-state>
+    local t f
+    t="$(now)"
+    [ $(( t - last_sample_t )) -lt "${SAMPLE_LOG_SECS:-300}" ] && return 0
+    last_sample_t="$t"
+    f="$LIGHT_HOME/samples-$(today).csv"
+    [ -f "$f" ] || echo "time,lux,display,mode,target_brightness,target_kelvin,sent_brightness,sent_gains,offset" > "$f"
+    printf '%s,%s,%s,%s,%s,%s,%s,%s/%s/%s,%s\n' "$(date +%H:%M)" "$lux" "$1" "$(current_mode)" \
+        "$(state_get target '' | sed -n 's/.*brightness=\([0-9]*\).*/\1/p')" "$(state_get kelvin '')" \
+        "$(state_get last_brightness '')" "$(state_get last_red '')" "$(state_get last_green '')" "$(state_get last_blue '')" \
+        "$(state_get bright_offset 0)" >> "$f"
+}
+find "$LIGHT_HOME" -maxdepth 1 -name 'samples-*.csv' -mtime +30 -exec rm -f {} + 2>/dev/null
+
 prev_lf="$(state_get filtered "")"
 acted_lf="$(state_get acted "")"
 acted_mode=""
@@ -133,6 +149,7 @@ while true; do
 
         # Display sleeping (Mac awake): keep filtering, write nothing. On wake: settle, reapply once.
         ds="$(display_state)"
+        sample_log "$ds"
         if [ "$ds" = asleep ]; then
             [ $disp_was_asleep = 0 ] && log "display asleep: pausing DDC writes"
             disp_was_asleep=1
