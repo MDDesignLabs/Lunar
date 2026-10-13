@@ -15,7 +15,8 @@
 CM_PROTO="${CM_PROTO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 # Old defaults, from every earlier config.example.sh (git log -- lighting-prototype/config.example.sh,
-# 5840d63 … 12fff9a), and other superseded values. key<TAB>value<TAB>why.
+# 5840d63 … 12fff9a), and other superseded values. key<TAB>value<TAB>why. A value of * means the
+# key is retired: any value of it is removed.
 # Deliberately NOT here, although they were defaults once, because they're a real choice:
 # BACKEND=lunar and LUX_SOURCE=lunar (Lunar Pro). STALE_SECS=300 and M1DDC=/usr/local/bin/m1ddc
 # are handled in the awk below: old only when LUX_SOURCE isn't lunar / the probe-00 m1ddc exists.
@@ -31,11 +32,18 @@ GAIN_DAILY_CAP${t}50${t}an old default
 GAIN_TABLE${t}6500:50:50:50,5500:50:47:44,5000:50:46:40,4500:50:44:36${t}the old example table (probe 05 measured the AOC: now the default)
 GAIN_GAMMA${t}2.2${t}the old guessed gamma (probe 05 measured 1.23: now the default)
 GAIN_GAMMA${t}1.0${t}the placeholder used until probe 05 ran (now the measured default)
-MONITOR_NITS_MIN${t}40${t}an old default (KitGuru measured 55)
-MONITOR_NITS_MAX${t}350${t}an old default (KitGuru measured 372)
 RESTORE_LUNAR_MODE${t}sensor${t}a setting no longer used
+BIAS_K${t}*${t}no longer used: the bias level is absolute now (BIAS_TARGET_NITS, BIAS_CAL; RESEARCH_08 section 2)
+MONITOR_NITS_MIN${t}*${t}no longer used: only the old screen-proportional bias read it
+MONITOR_NITS_MAX${t}*${t}no longer used: only the old screen-proportional bias read it
+BIAS_MIN${t}*${t}no longer used: the bias is always 1–100 % when on (0 = off)
+BIAS_MAX${t}40${t}an old default (now 15, SPEC FR-62)
 EOF
 }
+
+# Machine-specific measurements (probe 07 saves them with a dated comment). Never removed,
+# even when a value happens to equal a default.
+CM_MEASURED_KEYS="GOVEE_IPS BIAS_CAL BIAS_WALL_RHO"
 
 # The parser, the classifier and the rewriter, in one awk program (POSIX awk: macOS and Linux).
 # Files: 1 = known values (TSV), 2 and 3 = the config (read twice: pass 1 finds each key's last
@@ -87,7 +95,9 @@ function is_seed(v,    n, a, i, good) {
 }
 # Why a value would be removed, or "" to keep it.
 function why(k, v) {
+    if (k in MEASURED) return ""
     if ((k SUBSEP v) in DEF) return "same as the repo default"
+    if ((k SUBSEP "*") in OLD) return "old: " OLD[k, "*"]
     if ((k SUBSEP v) in OLD) return "old: " OLD[k, v]
     if (k == "BRIGHTNESS_CURVE" && is_seed(v)) return "old: Lunar'\''s seed curve (RESEARCH_07 replaced it)"
     if (k == "STALE_SECS" && v == "300" && LASTVAL["LUX_SOURCE"] != "lunar") return "old: an old default (300 is for LUX_SOURCE=lunar)"
@@ -99,6 +109,7 @@ BEGIN {
     FS = "\t"
     split("0:21,13:31,23:34,39:39,71:41,80:44,100:45,135:47,160:49,190:54,224:58,313:69,565:91,702:99,800:100,1000:100", s, ",")
     for (i in s) SEED[s[i]] = 1
+    n = split(measured, s, " "); for (i = 1; i <= n; i++) MEASURED[s[i]] = 1
     HEADER1 = "# Personal overrides only. Defaults come from lighting-prototype/config.example.sh and update with git pull."
     HEADER2 = "# Run `bin/light update` to update."
 }
@@ -162,7 +173,7 @@ cm_awk() {  # <mode> <config> [report]
     local known; known="$(mktemp "${TMPDIR:-/tmp}/light-known.XXXXXX")" || return 1
     cm_known > "$known"
     local tools=0; [ -x "${LIGHT_HOME:-$HOME/.lighting}/tools/m1ddc" ] && tools=1
-    awk -v mode="$1" -v home="$HOME" -v have_tools_m1ddc=$tools -v report="${3:-/dev/null}" \
+    awk -v mode="$1" -v home="$HOME" -v have_tools_m1ddc=$tools -v report="${3:-/dev/null}" -v measured="$CM_MEASURED_KEYS" \
         "$CM_AWK" "$known" "$2" "$2"
     local rc=$?; rm -f "$known"; return $rc
 }
@@ -215,6 +226,41 @@ config_migrate() {  # [config]
     echo "  backup: $backup"
     cm_log "config migrate: removed $removed ($(sed -n 's/^  removed  \([A-Za-z0-9_]*\)=.*/\1/p' "$report" | tr '\n' ' ' | sed 's/ $//')), kept $kept, left $left; backup $backup"
     rm -f "$report"
+}
+
+# config_save_key <KEY> <value> [note]: write   KEY="value"   # <note>, <date>   into the user's
+# config. Replaces the last line that assigns KEY when that's a one-line assignment, else appends
+# (the last assignment wins in shell). No other line is touched. Backs up first, as config_migrate
+# does. For probe results (probe 07: GOVEE_IPS, BIAS_CAL, BIAS_WALL_RHO), which config_migrate keeps.
+config_save_key() {
+    local key="$1" val="$2" note="${3:-measured by probe 07}" cfg backup="" base tmp line n=1
+    case "$key" in ''|[0-9]*|*[!A-Za-z0-9_]*) echo "config_save_key: bad key '$key'" >&2; return 1 ;; esac
+    case "$val" in *[\"\$\`\\\']*) echo "config_save_key: the value can't hold quotes, \$, \` or \\" >&2; return 1 ;; esac
+    cfg="$(cm_config_path)"
+    mkdir -p "$(dirname "$cfg")" || return 1
+    line="$key=\"$val\"   # $note, $(date +%Y-%m-%d)"
+    tmp="$cfg.save.$$"
+    if [ -s "$cfg" ]; then
+        base="$cfg.bak-$(date +%Y%m%d-%H%M%S)"; backup="$base"
+        while [ -e "$backup" ]; do n=$(( n + 1 )); backup="$base-$n"; done
+        cp -p "$cfg" "$backup" || { echo "config_save_key: could not back up $cfg; nothing written" >&2; return 1; }
+        cp -p "$cfg" "$tmp" || return 1          # keeps the original's permissions
+        awk -v key="$key" -v line="$line" '
+            function simple(l,    r, q) {        # one line: any opening quote closes on it
+                r = substr(l, index(l, "=") + 1); q = substr(r, 1, 1)
+                if (q == "\"" || q == "\047") return index(substr(r, 2), q) > 0
+                return 1
+            }
+            FNR == NR { if ($0 ~ ("^[ \t]*" key "=")) { last = FNR; ok = simple($0) }; next }
+            { if (FNR == last && ok) print line; else print }
+            END { if (!(last && ok)) print line }
+        ' "$cfg" "$cfg" > "$tmp" || { rm -f "$tmp"; echo "config_save_key: failed; $cfg left as it is" >&2; return 1; }
+    else
+        printf '%s\n' "$line" > "$tmp" || return 1
+    fi
+    mv "$tmp" "$cfg" || return 1
+    cm_log "config: saved $key=\"$val\" ($note)${backup:+; backup $backup}"
+    echo "Saved $key=\"$val\" to $cfg${backup:+ (backup: $backup)}"
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

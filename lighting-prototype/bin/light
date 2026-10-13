@@ -7,7 +7,7 @@
 #   light offset <n>               set the nudge directly (0 clears it)
 #   light kelvin <K>               write the gains for K right now (manual / testing)
 #   light neutral                  write calibrated neutral gains once (panic button)
-#   light bias <pct> [K]           drive the Govee strips directly
+#   light bias <pct|off> [K]       drive the Govee bars directly (0 or off = turn 0; K clamped 2200–6500)
 #   light status                   mode, lux, targets, today's write counts
 #   light writes [n]               last n DDC writes (default 20)
 #   light report [YYYY-MM-DD]      one day's summary (lux, brightness, colour, events) to paste for review
@@ -98,7 +98,6 @@ case "$1" in
             -v curve="$BRIGHTNESS_CURVE" -v bmin=0 -v bmax=100 -v comp=0 -v gamma=1 \
             -v kdim_lux=1 -v kdim="$2" -v kbright_lux=10 -v kbright="$2" -v kstep=1 -v kfloor="$KELVIN_FLOOR" \
             -v table="$GAIN_TABLE" -v critical_gains="$CRITICAL_GAINS" \
-            -v nits_min=0 -v nits_max=1 -v bias_k=0 -v bias_min=0 -v bias_max=0 \
             | grep -E '^(red|green|blue)=')"
         ddc_gains "$red" "$green" "$blue" 1 || { echo "not written: $(gain_rc_reason $?)" >&2; exit 1; }
         [ "$2" -lt "${KELVIN_FLOOR:-0}" ] && echo "(${2}K is below KELVIN_FLOOR; used ${KELVIN_FLOOR}K)"
@@ -110,9 +109,11 @@ case "$1" in
         echo "neutral: $CRITICAL_GAINS"
         ;;
     bias)
-        [ -z "$2" ] && { echo "usage: light bias <pct> [K]" >&2; exit 64; }
-        govee_apply "$2" "${3:-6500}" 1
-        echo "bias ${2}% ${3:-6500}K → ${GOVEE_IPS:-<no GOVEE_IPS set>}"
+        p="$2"; [ "$p" = off ] && p=0
+        case "$p" in ''|*[!0-9]*) echo "usage: light bias <pct|off> [K]" >&2; exit 64 ;; esac
+        govee_apply "$p" "${3:-6500}" 1
+        if [ "$p" = 0 ]; then echo "bias off → ${GOVEE_IPS:-<no GOVEE_IPS set>}"
+        else echo "bias $(state_get govee_pct "$p")% $(state_get govee_k "${3:-6500}")K → ${GOVEE_IPS:-<no GOVEE_IPS set>}"; fi
         ;;
     status)
         m="$(current_mode)"; [ "$m" = critical ] && [ "$(state_get critical_rc 0)" != 0 ] && m="critical (INCOMPLETE: gains not neutral yet)"
@@ -120,6 +121,12 @@ case "$1" in
         echo "lux:       $(state_get lux '?') (filtered log10: $(state_get filtered '?'))"
         echo "target:    $(state_get target '?')"
         echo "offset:    $(state_get bright_offset 0) (brightness nudge)   display: $(display_state)"
+        if [ -n "$GOVEE_IPS" ]; then
+            case "$(state_get govee_on '')" in
+                1) b="on $(state_get govee_pct '?')% $(state_get govee_k '?')K" ;; 0) b=off ;; *) b=unknown ;; esac
+            [ -n "$BIAS_CAL" ] || b="$b (BIAS_CAL not measured: fallback ${BIAS_FALLBACK_PCT}%; run probe/07-govee.sh)"
+            echo "bias:      $b → $GOVEE_IPS"
+        fi
         echo "last sent: brightness=$(state_get last_brightness -) gains=$(state_get last_red -)/$(state_get last_green -)/$(state_get last_blue -)"
         printf 'today:     '
         for k in brightness red green blue; do printf '%s=%s ' "$k" "$(state_get "count_$(today)_$k" 0)"; done

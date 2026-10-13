@@ -44,6 +44,12 @@ cleanup() {
     [ -n "$STREAM_PID" ] && kill_tree "$STREAM_PID"
     rm -f "$FIFO"
     unlock                    # if the signal arrived mid-write, release our own lock first
+    # Bias light off on a clean stop (FR-64), sent twice. A crash leaves the last state; the
+    # next start corrects it (govee_invalidate below). Nothing is sent with GOVEE_IPS="".
+    if [ -n "$GOVEE_IPS" ]; then
+        log "exit: bias light off"
+        govee_apply 0 "$(state_get govee_k 6500)" 1
+    fi
     if [ "$NEUTRAL_ON_EXIT" = 1 ]; then
         log "exit: writing neutral gains so the monitor isn't left warm"
         IFS=: read -r r g b <<EOF
@@ -76,6 +82,8 @@ EOF
 fi
 state_set running 1
 echo $$ > "$STATE/lightd.pid"     # lets the probes (and you) check whether lightd is running
+# The bars may hold anything (a crash, the Govee app, a probe): send the full state once.
+[ -n "$GOVEE_IPS" ] && { govee_invalidate; state_set bias_uncal_logged 0; }
 ddc_prune_counts
 # The override is restored first, before any lux sample arrives (the sensor may be offline).
 if [ "$(current_mode)" = critical ]; then
@@ -147,12 +155,21 @@ while true; do
         prev_lf="$(engine_filter "$lux" "$prev_lf" "$dt")"
         state_set lux "$lux"; state_set filtered "$prev_lf"
 
-        # Display sleeping (Mac awake): keep filtering, write nothing. On wake: settle, reapply once.
+        # Display sleeping (Mac awake): keep filtering, write no DDC. The bias light goes off
+        # (FR-64; repeated each sample, but govee_apply sends only the transition, and retries
+        # one held back by the 2 s limit). On wake: settle, reapply once (the bars come back on).
+        #
+        # Mac sleep: the shell has no pre-sleep hook. lightd only sees a Mac sleep after waking
+        # (the sample gap below), so the bars are switched off before a Mac sleep only when the
+        # display sleeps first, which it normally does. "Sleep" from the Apple menu or a closed
+        # lid can skip that and leave the bars on until wake. The app (P8-T03) uses
+        # NSWorkspace.willSleepNotification; RESEARCH_08 §4: "shell: display-sleep only".
         ds="$(display_state)"
         sample_log "$ds"
         if [ "$ds" = asleep ]; then
-            [ $disp_was_asleep = 0 ] && log "display asleep: pausing DDC writes"
+            [ $disp_was_asleep = 0 ] && log "display asleep: pausing DDC writes${GOVEE_IPS:+, bias light off}"
             disp_was_asleep=1
+            govee_apply 0 "$(state_get govee_k 6500)"
             continue
         fi
         if [ $disp_was_asleep = 1 ]; then
@@ -181,8 +198,9 @@ while true; do
             state_set acted "$acted_lf"
             [ -n "$VERBOSE" ] && echo "lux=$lux lf=$prev_lf $(state_get target)" >&2
         else
-            # Nothing changed enough; only keep the UDP bias state fresh.
-            govee_apply "$(state_get govee_pct 0)" "$(state_get govee_k 6500)"
+            # Nothing changed enough for DDC; the bias light may still have a target held back
+            # by its 2 s limit, or be due its 60 s refresh.
+            govee_tick
         fi
     done < "$FIFO"
 

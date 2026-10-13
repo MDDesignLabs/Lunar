@@ -81,7 +81,57 @@ function rel_luminance(r, g, b, nr, ng, nb) {
     return 0.2126 * (r / nr) ^ gamma + 0.7152 * (g / ng) ^ gamma + 0.0722 * (b / nb) ^ gamma
 }
 
+# ── Bias light (SPEC FR-61–FR-64, RESEARCH_08 §2–§3) ──
+# Absolute level: wall luminance L = bias_nits (cd/m2) on a matte wall of reflectance rho needs
+# wall illuminance E = pi * L / rho (lx). The strip % for E comes from inverting the measured
+# table bias_cal = "pct:lux,..." (wall lux at each strip %, probe 07 check F), piecewise-linearly.
+# Sets BIAS_E (target lx), BIAS_CAL_OK (1 if the table had ≥ 1 usable point) and returns the
+# unrounded %. With no usable table: the fallback %, unrounded.
+function bias_pct(nits, rho, cal, fallback,    raw, pts, kv, P, L, n, i, j, t, best, m, PP, LL) {
+    if (rho + 0 <= 0) rho = 0.8
+    BIAS_E = 3.14159265 * nits / rho
+    raw = split(cal, pts, ",")
+    n = 0
+    for (i = 1; i <= raw; i++) {
+        if (split(pts[i], kv, ":") != 2) continue
+        if (kv[1] !~ /^ *[0-9.]+ *$/ || kv[2] !~ /^ *[0-9.]+ *$/) continue
+        if (kv[1] + 0 <= 0 || kv[1] + 0 > 100) continue
+        n++; P[n] = kv[1] + 0; L[n] = kv[2] + 0
+    }
+    BIAS_CAL_OK = (n > 0)
+    if (n == 0) return fallback + 0
+    for (i = 2; i <= n; i++)                       # sort by %
+        for (j = i; j > 1 && P[j - 1] > P[j]; j--) {
+            t = P[j]; P[j] = P[j - 1]; P[j - 1] = t
+            t = L[j]; L[j] = L[j - 1]; L[j - 1] = t
+        }
+    # Monotonic: a reading below an earlier one (sensor noise) can't be inverted; drop it.
+    m = 0; best = -1
+    for (i = 1; i <= n; i++) if (L[i] > best) { m++; PP[m] = P[i]; LL[m] = L[i]; best = L[i] }
+    if (BIAS_E <= LL[1]) return (LL[1] > 0) ? PP[1] * BIAS_E / LL[1] : PP[1]   # below the table: through the origin
+    for (i = 1; i < m; i++)
+        if (BIAS_E <= LL[i + 1])
+            return PP[i] + (PP[i + 1] - PP[i]) * (BIAS_E - LL[i]) / (LL[i + 1] - LL[i])
+    return PP[m]                                    # above the table: its brightest step
+}
+
+# The room decides on or off, with hysteresis: off above off_lux, back on below on_lux.
+# prev = the last decision (1 on, 0 off, "" none yet: on unless above off_lux).
+function bias_room_on(lf, prev, off_lux, on_lux,    lux) {
+    lux = 10 ^ lf
+    if (prev == "0") return (lux < on_lux) ? 1 : 0
+    return (lux > off_lux) ? 0 : 1
+}
+
 BEGIN {
+    if (cmd == "biaspct") {
+        # awk -f engine.awk -v cmd=biaspct -v bias_nits=5 -v bias_rho=0.8 -v bias_cal=... -v bias_fallback=5 -v bias_max=15
+        p = bias_pct(bias_nits, bias_rho, bias_cal, bias_fallback)
+        r = round(clamp(p, 1, (bias_max == "") ? 100 : bias_max))
+        printf "bias=%d\ntarget_lux=%.1f\nexact_pct=%.2f\ncalibrated=%d\n", r, BIAS_E, p, BIAS_CAL_OK
+        exit
+    }
+
     if (cmd == "filter") {
         l = log10(lux < 0.1 ? 0.1 : lux)
         if (prev == "") { printf "%.4f\n", l; exit }
@@ -105,7 +155,7 @@ BEGIN {
             if (gb > cg[3] + 0) gb = cg[3] + 0
             b = curve_eval(curve, lf) + boffset
             if (actual_b != "") {
-                # Lunar owns brightness: report its value, only use it for the bias light.
+                # Lunar owns brightness: report its value (status and the sample log only).
                 b = actual_b
             } else if (comp == 1) {
                 # Compensate for the gains actually on the monitor (on_gains "r:g:b"), which
@@ -116,9 +166,20 @@ BEGIN {
             }
         }
         b = round(clamp(b, bmin, bmax))
-        nits = nits_min + (nits_max - nits_min) * b / 100
-        bias = round(clamp(bias_k * nits, bias_min, bias_max))
-        printf "kelvin=%d\nbrightness=%d\nred=%d\ngreen=%d\nblue=%d\nbias=%d\n", k, b, gr, gg, gb, bias
+        # Bias: an absolute level, independent of screen brightness (FR-62). 0 = off.
+        bias = round(clamp(bias_pct(bias_nits, bias_rho, bias_cal, bias_fallback), 1, (bias_max == "") ? 100 : bias_max))
+        if (mode == "critical") {
+            room = (bias_prev == "") ? 1 : bias_prev     # the override doesn't move the room decision
+            bk = 6500                                     # FR-61
+            if (bias_critical == "off") bias = 0
+        } else {
+            room = bias_room_on(lf, bias_prev, (off_lux == "") ? 60 : off_lux, (on_lux == "") ? 40 : on_lux)
+            bk = k                                        # FR-63: the screen's target Kelvin
+            if (!room) bias = 0
+        }
+        bk = clamp(bk, (gk_min == "") ? 2200 : gk_min, (gk_max == "") ? 6500 : gk_max)
+        printf "kelvin=%d\nbrightness=%d\nred=%d\ngreen=%d\nblue=%d\nbias=%d\nbias_k=%d\nbias_room=%d\nbias_cal=%d\n", \
+            k, b, gr, gg, gb, bias, bk, room, BIAS_CAL_OK
         exit
     }
 

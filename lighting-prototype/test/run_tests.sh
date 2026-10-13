@@ -46,7 +46,8 @@ PIDS=""
 # is still a copy of this shell and would otherwise run this trap too (bash 3.2 has no
 # $BASHPID, so compare the trap runner's PID via a child's parent PID).
 MAIN_PID=$$
-# One run at a time: the fake devices use fixed ports (18080–18092, 4001–4003).
+# One run at a time: the fake devices use fixed ports (18080–18099, 4001–4003).
+# The Govee checks (§12) use 127.0.0.2 and 127.0.0.3 too where the loopback allows it.
 SUITE_LOCK="${TMPDIR_ORIG:-/tmp}/lighting-tests.lock"
 if ! mkdir "$SUITE_LOCK" 2>/dev/null; then
     other="$(cat "$SUITE_LOCK/pid" 2>/dev/null)"
@@ -75,7 +76,7 @@ check "10 lux → 5000K → your row 50/46/40" \
 check "Kelvin is quantised to 250K steps" \
     "[ \$(( \$(t 1.7 | sed -n 's/kelvin=//p') % 250 )) = 0 ]"
 check "between table rows the gains interpolate (5250K → 50/47/42)" \
-    "awk -f lib/engine.awk -v cmd=targets -v lf=2 -v mode=adaptive -v kdim_lux=1 -v kdim=5250 -v kbright_lux=10 -v kbright=5250 -v kstep=1 -v table='$GAIN_TABLE' -v critical_gains=50:50:50 -v curve=0:50 -v bmin=0 -v bmax=100 -v nits_min=0 -v nits_max=1 -v bias_k=0 -v bias_min=0 -v bias_max=0 | grep -q 'green=47' "
+    "awk -f lib/engine.awk -v cmd=targets -v lf=2 -v mode=adaptive -v kdim_lux=1 -v kdim=5250 -v kbright_lux=10 -v kbright=5250 -v kstep=1 -v table='$GAIN_TABLE' -v critical_gains=50:50:50 -v curve=0:50 -v bmin=0 -v bmax=100 | grep -q 'green=47' "
 check "colour-critical ignores lux: 5 lux → 6500K 50/50/50" \
     "t 0.7 critical | grep -q kelvin=6500 && t 0.7 critical | grep -q green=50"
 check "example defaults (RESEARCH_07): 0.5 lux → brightness 0, 300 lux → 22" \
@@ -106,8 +107,8 @@ check "gain analysis with 3% sensor noise: exponent 2.2, no headroom → GAMMA-E
     "echo \"\$a22\" | grep -q 'RESULT Q3: GAMMA' && ! echo \"\$a22\" | grep -q 'HEADROOM exists'"
 check "gain analysis with 3% noise: exponent 1.0 with real headroom → LINEAR-LIGHT, headroom found" \
     "echo \"\$a10\" | grep -q 'RESULT Q3: LINEAR' && echo \"\$a10\" | grep -q 'HEADROOM exists'"
-check "bias follows Lunar's actual brightness when Lunar owns it" \
-    "[ \$(t 2 adaptive 100 | sed -n 's/bias=//p') -gt \$(t 2 adaptive 10 | sed -n 's/bias=//p') ]"
+check "the bias level no longer follows screen brightness (Lunar's 100 vs 10: same %; FR-62)" \
+    "[ \$(t 0 adaptive 100 | sed -n 's/^bias=//p') = \$(t 0 adaptive 10 | sed -n 's/^bias=//p') ]"
 
 echo "── 2. DDC scheduler (mock m1ddc)"
 fresh "BRIGHTNESS_MIN_INTERVAL=0"
@@ -169,21 +170,21 @@ check "a failed write is logged as FAIL and not remembered" \
 
 echo "── 3. Govee UDP (real sockets, fake strip)"
 GLOG="$(mktemp)"
-python3 test/fake_govee.py "$GLOG" 2>/dev/null & PIDS="$PIDS $!"
+python3 test/fake_govee.py "$GLOG" 2>/dev/null & GPID=$!; PIDS="$PIDS $GPID"
 sleep 0.5
 bin/govee brightness 127.0.0.1 10
 bin/govee kelvin 127.0.0.1 5000
 sleep 0.3
 check "brightness packet on :4003" "grep -q '{\"msg\":{\"cmd\":\"brightness\",\"data\":{\"value\":10}}}' '$GLOG'"
 check "colorwc Kelvin packet on :4003" "grep -q 'colorTemInKelvin\":5000' '$GLOG'"
-disc="$(GOVEE_MCAST=127.0.0.1 bin/govee discover 1)"
-check "discovery: scan → reply on :4002 parsed (unicast)" "echo '$disc' | grep -q '\"sku\": \"H6046\"'"
-disc_m="$(bin/govee discover 1)"
+disc="$(GOVEE_MCAST=127.0.0.1 bin/govee discover 1 2>/dev/null)"
+check "discovery: scan → reply on :4002 parsed (unicast)" "echo '$disc' | grep -q '^127.0.0.1 *H6046 '"
+disc_m="$(bin/govee discover 1 2>/dev/null)"
 if echo "$disc_m" | grep -q H6046; then ok "discovery over real multicast 239.255.255.250"
 else echo "  SKIP multicast discovery (no multicast route in this container; unicast path above is the same code)"; fi
 
 echo "── 4. End to end: lightd + fake ESP32 (SSE) + fake Govee, m1ddc backend"
-fresh "KELVIN_MIN_INTERVAL=0"
+fresh "KELVIN_MIN_INTERVAL=0 BIAS_OFF_LUX=100000 BIAS_ON_LUX=99999"   # bias on all the way from 300 lux down
 python3 test/fake_sensor.py 18080 0.2 300 300 300 200 100 50 20 10 5 5 5 5 5 5 5 5 5 5 5 5 & PIDS="$PIDS $!"
 sleep 0.5
 : > "$GLOG"
@@ -593,6 +594,205 @@ check "light report prints the config, an hourly row, the write counts and the e
     "echo \"\$rep\" | grep -q '== Lighting report for' && echo \"\$rep\" | grep -q '^  [0-2][0-9]:00 ' && echo \"\$rep\" | grep -q 'brightness [1-9][0-9]*, red' && echo \"\$rep\" | grep -q 'lightd start'" "$(echo "$rep" | head -20)"
 check "…and counts your nudges (light brighter is logged as a user action)" "echo \"\$rep\" | grep -q '(1 nudges or manual changes by you)'"
 check "light report rejects a malformed date" "! bin/light report 12-10-2026 >/dev/null 2>&1"
+
+echo "── 12. Bias light (Govee H6056): transport, level, states, rate limits (FR-60–FR-66)"
+kill $GPID 2>/dev/null; wait $GPID 2>/dev/null; sleep 0.3          # §3's single fake light
+# Two lights on 127.0.0.2/.3 where the loopback allows it (Linux); one on 127.0.0.1 otherwise.
+if python3 -c 'import socket; socket.socket(socket.AF_INET, socket.SOCK_DGRAM).bind(("127.0.0.2", 0))' 2>/dev/null; then
+    GA=127.0.0.2; GB=127.0.0.3; NDEV=2
+else
+    GA=127.0.0.1; GB=""; NDEV=1; echo "  (127.0.0.2 can't be bound here: the checks use one fake light, and the two-light ones are skipped)"
+fi
+IPS="$GA${GB:+ $GB}"
+GLOG2="$TEST_TMP/govee2.log"; GST="$TEST_TMP/govee2.state"; : > "$GLOG2"
+python3 test/fake_govee.py "$GLOG2" H6056 --dev "$GA" ${GB:+--dev "$GB:noip:nomcast"} --state "$GST" 2>/dev/null & GPID2=$!; PIDS="$PIDS $GPID2"
+sleep 0.5
+gcount() { local c; c="$(grep -c -- "$1" "$GLOG2" 2>/dev/null)"; echo "${c:-0}"; }
+gseq() { awk -v ip="$1" '$1 == ip { c = $3; sub(/.*"cmd":"/, "", c); sub(/".*/, "", c); v = $3; sub(/.*"(value|colorTemInKelvin)":/, "", v); sub(/[^0-9].*/, "", v); printf "%s%s=%s", (n++ ? " " : ""), c, v }' "$GLOG2"; }
+# Every datagram to one light ≥ 300 ms after the previous one (290: timer jitter at the receiver).
+gaps_ok() { awk '{ if (($1 in t) && $2 - t[$1] < 290) { bad = 1; print "gap " $2 - t[$1] " ms to " $1 > "/dev/stderr" } t[$1] = $2 } END { exit bad }' "$GLOG2"; }
+fstate() { python3 -c 'import json, sys; d = json.load(open(sys.argv[1]))[sys.argv[2]]; print(d["onOff"], d["brightness"], d["colorTemInKelvin"])' "$GST" "$1"; }
+
+if [ $NDEV = 2 ]; then
+    fresh "GOVEE_IPS=\"$GB\""      # only the light that ignores multicast is configured
+    disc="$(GOVEE_MCAST=$GA bin/govee discover 1 2>"$TEST_TMP/disc.err")"
+    check "discovery joins the multicast group 239.255.255.250 before it scans" "grep -q 'joined multicast group 239.255.255.250' $TEST_TMP/disc.err" "$(cat $TEST_TMP/disc.err)"
+    check "discovery: the scan finds one light, and a unicast scan to GOVEE_IPS finds one that ignores multicast" \
+        "echo \"\$disc\" | grep -q '^$GA ' && echo \"\$disc\" | grep -q '^$GB '" "$disc"
+    check "a scan reply without ip is listed by the sender's address (ip, sku, device id printed)" \
+        "echo \"\$disc\" | grep '^$GB ' | grep -q 'H6056 *AA:BB:CC:DD:EE:00:00:03 *no ip in reply: sender address used'" "$disc"
+    disc_m="$(bin/govee discover 1 2>/dev/null)"
+    if echo "$disc_m" | grep -q "^$GA "; then ok "discovery over real multicast reaches the fake light (and not the one that ignores it)"
+    else echo "  SKIP real multicast to the two fake lights (no multicast route here)"; fi
+fi
+
+fresh "GOVEE_IPS=\"$IPS\" BIAS_REFRESH=3600"; . lib/common.sh; . lib/govee.sh
+: > "$GLOG2"; govee_apply 0 5000 1
+check "off is turn 0, sent twice to every light, and nothing else (FR-64, FR-65)" \
+    "[ \$(gcount '\"cmd\":\"turn\",\"data\":{\"value\":0}') = $(( 2 * NDEV )) ] && [ \$(wc -l < $GLOG2) = $(( 2 * NDEV )) ] && [ \$(state_get govee_on) = 0 ]" "$(cat $GLOG2)"
+govee_apply 4 5000 1
+check "coming back on: turn 1 twice, then brightness, then Kelvin, in that order" \
+    "[ \"\$(gseq $GA)\" = 'turn=0 turn=0 turn=1 turn=1 brightness=4 colorwc=5000' ]" "$(gseq $GA)"
+check "…every light gets the same sequence" "[ -z '$GB' ] || [ \"\$(gseq $GB)\" = \"\$(gseq $GA)\" ]"
+govee_apply 150 5000 1; govee_apply 0.3 5000 1
+check "brightness is clamped to 1–100: 150 → 100, 0.3 → 1 (never 0)" \
+    "gseq $GA | grep -q 'brightness=100 colorwc=5000 brightness=1 colorwc=5000\$'" "$(gseq $GA)"
+govee_apply 5 1500 1; govee_apply 5 9000 1
+check "Kelvin is clamped to GOVEE_K_MIN/MAX: 1500 → 2200, 9000 → 6500 (FR-63)" \
+    "gseq $GA | grep -q 'colorwc=2200 brightness=5 colorwc=6500\$'" "$(gseq $GA)"
+: > "$GLOG2"; govee_apply 6 6500; govee_apply 7 6500; govee_apply 8 6500
+check "a change within 2 s of the last update is held back, not sent (marked pending)" \
+    "[ \$(wc -l < $GLOG2) = 0 ] && [ \$(state_get govee_pending) = 1 ]"
+sleep 2.1; govee_tick
+check "…and the next tick sends only the latest target (coalesced: 8, not 6 or 7), without turn 1" \
+    "[ \"\$(gseq $GA)\" = 'brightness=8' ] && [ \$(state_get govee_pending) = 0 ]" "$(gseq $GA)"
+sleep 2.1; : > "$GLOG2"; govee_apply 8 6450
+check "no send for a change under 100 K at the same %" "[ \$(wc -l < $GLOG2) = 0 ]"
+govee_apply 8 6300
+check "…a change of ≥ 100 K sends only colorwc" "[ \"\$(gseq $GA)\" = 'colorwc=6300' ]" "$(gseq $GA)"
+sleep 2.1; : > "$GLOG2"
+for i in 10 11 12 13 14 15 16 17 18 19 20; do govee_apply $i 6300; sleep 0.3; done; govee_tick
+nb="$(grep "^$GA " "$GLOG2" | grep -c brightness)"
+check "a target changing every 0.3 s for 3.3 s gives ≤ 2 updates, ≥ 2 s apart (FR-65)" \
+    "[ $nb -le 2 ] && awk '/brightness/ && \$1 == \"$GA\" { if (p && \$2 - p < 1950) exit 1; p = \$2 }' $GLOG2" "$(cat $GLOG2)"
+check "datagrams to one light are always ≥ 300 ms apart, across calls too" "gaps_ok"
+sleep 2.1; govee_tick; sleep 2.1            # flush the coalesced target first
+[ -n "$GB" ] && bin/govee off "$GB"; sleep 0.3; : > "$GLOG2"
+BIAS_REFRESH=1; state_set govee_t 0; govee_tick; BIAS_REFRESH=3600
+check "the refresh resends brightness and Kelvin, never turn 1 (FR-66)" \
+    "[ \"\$(gseq $GA)\" = 'brightness=$(state_get govee_pct) colorwc=6300' ] && [ \$(gcount '\"turn\"') = 0 ]" "$(cat $GLOG2)"
+check "…so a light switched off in the Govee app stays off" "[ -z '$GB' ] || [ \"\$(fstate $GB | cut -d' ' -f1)\" = 0 ]"
+sleep 2.1; : > "$GLOG2"; govee_apply 0 6300; govee_apply 0 6300; sleep 2.1; govee_tick; govee_tick
+check "while off, nothing is refreshed or resent (one off transition only)" "[ \$(wc -l < $GLOG2) = $(( 2 * NDEV )) ]"
+
+eng_b() { eng -v cmd=biaspct -v bias_nits="${1:-5}" -v bias_rho="${2:-0.8}" -v bias_cal="$3" -v bias_fallback=5 -v bias_max="${4:-15}"; }
+check "absolute level: 5 cd/m2 on a ρ 0.80 wall = 19.6 lx → 3 % through BIAS_CAL 1:6,2:12,5:30,10:60 (FR-62)" \
+    "eng_b 5 0.8 '1:6,2:12,5:30,10:60' | tr '\n' ' ' | grep -q 'bias=3 target_lux=19.6 exact_pct=3.27 calibrated=1'" "$(eng_b 5 0.8 '1:6,2:12,5:30,10:60' | tr '\n' ' ')"
+check "…ρ 0.60 needs more light (26.2 lx → 4 %); a darker target less (2 cd/m2 → 1 %)" \
+    "eng_b 5 0.6 '1:6,2:12,5:30,10:60' | grep -q bias=4 && eng_b 2 0.8 '1:6,2:12,5:30,10:60' | grep -q bias=1"
+check "…a noisy (non-monotonic), unsorted table with a malformed entry still inverts (2.4 %)" \
+    "eng_b 5 0.8 '3:25,1:6,junk,2:5,4:31' | grep -q 'exact_pct=2.44'"
+check "…the result is capped at BIAS_MAX (50 cd/m2 → 15 %) and is never below 1 % when on" \
+    "eng_b 50 0.8 '1:6,10:60,100:600' | grep -q bias=15 && eng_b 0.1 0.8 '1:6,10:60' | grep -q bias=1"
+check "an empty BIAS_CAL uses BIAS_FALLBACK_PCT (5 %) and says it isn't calibrated" \
+    "eng_b 5 0.8 '' | tr '\n' ' ' | grep -q 'bias=5 .*calibrated=0'"
+
+fresh "GOVEE_IPS=\"$IPS\" BIAS_CAL=\"1:6,2:12,5:30,10:60\" BIAS_REFRESH=3600"; . lib/common.sh; . lib/ddc.sh; . lib/govee.sh; . lib/apply.sh
+bt() { engine_targets "$1" "${2:-adaptive}" "$3" | sed -n "s/^${4:-bias}=//p"; }
+check "the bias doesn't depend on screen brightness (Lunar at 100 vs 10, or another curve: 3 % each)" \
+    "[ \$(bt 0 adaptive 100) = 3 ] && [ \$(bt 0 adaptive 10) = 3 ] && [ \$(BRIGHTNESS_CURVE=0:100 bt 0) = 3 ]"
+check "adaptive: the bars' Kelvin is the screen's target (10 lux → 5000 K), clamped to 2200 (KELVIN_DIM 1800, no floor)" \
+    "[ \$(bt 1 adaptive '' bias_k) = 5000 ] && [ \$(KELVIN_FLOOR= KELVIN_DIM=1800 bt 0 adaptive '' bias_k) = 2200 ]"
+: > "$GLOG2"; rm -f "$STATE/bias_room"
+for lux in 50 70 50 30 50; do
+    apply_targets "$(awk -v l=$lux 'BEGIN { printf "%.4f", log(l) / log(10) }')" 1
+    printf '%s:%s ' "$lux" "$(state_get govee_on)"
+done > "$TEST_TMP/hyst"
+check "room hysteresis: 50 lx on, 70 off (> BIAS_OFF_LUX 60), 50 stays off, 30 on (< BIAS_ON_LUX 40), 50 stays on" \
+    "[ \"\$(cat $TEST_TMP/hyst)\" = '50:1 70:0 50:0 30:1 50:1 ' ]" "$(cat $TEST_TMP/hyst)"
+check "…and each switch is logged" "grep -q 'bias: room above 60 lx: off' $LIGHT_HOME/lightd.log && grep -q 'bias: room below 40 lx' $LIGHT_HOME/lightd.log"
+state_set mode critical; : > "$GLOG2"
+apply_targets 2.4771 1                     # 300 lux, colour-critical
+check "colour-critical: 6500 K at the calibrated level, even in a bright room (FR-61)" \
+    "[ \"\$(gseq $GA)\" = 'brightness=3 colorwc=6500' ] && [ \$(state_get govee_on) = 1 ]" "$(gseq $GA)"
+BIAS_IN_CRITICAL=off; apply_targets 2.4771 1; BIAS_IN_CRITICAL=on
+check "…with BIAS_IN_CRITICAL=off the bars go off instead" "[ \$(state_get govee_on) = 0 ] && gseq $GA | grep -q 'turn=0 turn=0\$'"
+state_set mode adaptive
+fresh "GOVEE_IPS=\"$IPS\" BIAS_REFRESH=3600"; . lib/common.sh; . lib/ddc.sh; . lib/govee.sh; . lib/apply.sh
+apply_targets 0 1; apply_targets 0.3 1; apply_targets 0 1
+check "an empty BIAS_CAL runs at the fallback 5 % and logs 'not calibrated' once" \
+    "gseq $GA | grep -q 'brightness=5' && [ \$(grep -c 'bias: not calibrated yet' $LIGHT_HOME/lightd.log) = 1 ]"
+
+# lightd end to end: start, display sleep, wake, clean exit.
+fresh "GOVEE_IPS=\"$IPS\" KELVIN_MIN_INTERVAL=0 WAKE_DELAY=0 BIAS_CAL=\"1:6,2:12,5:30,10:60\" SENSOR_URL=http://127.0.0.1:18098/events"
+. lib/common.sh; state_set govee_on 1; state_set govee_pct 3; state_set govee_k 5000   # as a crash would leave it
+HELPER="$LIGHT_HOME/tools/displaystate"; mkdir -p "$LIGHT_HOME/tools"
+printf '#!/bin/sh\ncat "%s/display"\n' "$MOCK_DIR" > "$HELPER"; chmod +x "$HELPER"; echo awake > "$MOCK_DIR/display"
+python3 test/fake_sensor.py 18098 0.3 5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+: > "$GLOG2"
+bin/lightd & DPID=$!; PIDS="$PIDS $DPID"
+for i in $(seq 1 40); do grep -q colorwc "$GLOG2" && break; sleep 0.2; done
+check "lightd start sends the full on sequence, though the state said on (a crash is corrected)" \
+    "gseq $GA | grep -q '^turn=1 turn=1 brightness=3 colorwc=5000'" "$(gseq $GA)"
+sleep 2.2; echo asleep > "$MOCK_DIR/display"; t_sleep="$(now_ms)"
+for i in $(seq 1 40); do [ "$(gcount '"value":0')" -ge $(( 2 * NDEV )) ] && break; sleep 0.2; done
+t_off="$(awk -v ip=$GA '$1 == ip && /"value":0/ { print $2; exit }' "$GLOG2")"
+check "display asleep → the bars get turn 0 (twice) within 5 s (US-7 AC3)" \
+    "[ \$(gcount '\"turn\",\"data\":{\"value\":0}') = $(( 2 * NDEV )) ] && [ \$(( ${t_off:-0} - t_sleep )) -lt 5000 ]" "$(gseq $GA)"
+sleep 2; n_asleep="$(wc -l < "$GLOG2")"; sleep 1.5
+check "…and nothing more is sent while the display sleeps" "[ \$(wc -l < $GLOG2) = $n_asleep ]"
+echo awake > "$MOCK_DIR/display"
+for i in $(seq 1 40); do [ "$(gcount 'colorTemInKelvin')" -ge $(( 2 * NDEV )) ] && break; sleep 0.2; done
+check "display wakes → the bars come back on (turn 1 before brightness)" \
+    "gseq $GA | grep -q 'turn=0 turn=0 turn=1 turn=1 brightness=3'" "$(gseq $GA)"
+sleep 2.2; kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+check "clean exit → turn 0, twice, as the last datagrams to each light (FR-64)" \
+    "[ \"\$(gseq $GA | awk '{ print \$(NF - 1), \$NF }')\" = 'turn=0 turn=0' ] && grep -q 'exit: bias light off' $LIGHT_HOME/lightd.log" "$(gseq $GA)"
+check "every lightd datagram to one light was ≥ 300 ms after the previous one" "gaps_ok"
+
+# GOVEE_IPS="" = everything disabled: no packets, no state, no log lines, in lightd and in `light`.
+fresh "GOVEE_IPS= KELVIN_MIN_INTERVAL=0 WAKE_DELAY=0 SENSOR_URL=http://127.0.0.1:18098/events"
+HELPER="$LIGHT_HOME/tools/displaystate"; mkdir -p "$LIGHT_HOME/tools"
+printf '#!/bin/sh\ncat "%s/display"\n' "$MOCK_DIR" > "$HELPER"; chmod +x "$HELPER"; echo awake > "$MOCK_DIR/display"
+python3 test/fake_sensor.py 18098 0.3 5 5 5 300 300 300 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+: > "$GLOG2"
+bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 2; echo asleep > "$MOCK_DIR/display"; sleep 1.5; echo awake > "$MOCK_DIR/display"; sleep 1.5
+bin/light critical on >/dev/null; bin/light critical off >/dev/null; bin/light bias 5 >/dev/null
+kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+check "GOVEE_IPS=\"\": lightd and light send nothing, store no bias state and log nothing about it" \
+    "[ ! -s $GLOG2 ] && ! ls $LIGHT_HOME/state | grep -q '^govee_\|^bias_' && ! grep -qi 'govee\|bias' $LIGHT_HOME/lightd.log" \
+    "$(cat $GLOG2; ls $LIGHT_HOME/state; grep -i 'govee\|bias' $LIGHT_HOME/lightd.log)"
+check "brightness sent was 1–100 in every Govee check above (0 never sent as a level)" \
+    "! grep -h '\"cmd\":\"brightness\"' $GLOG $GLOG2 | sed 's/.*\"value\"://; s/}.*//' | awk '\$1 < 1 || \$1 > 100 { bad = 1 } END { exit !bad }'"
+
+# config_migrate: the retired bias keys go, the measured ones stay (also when they equal a default).
+export LIGHT_HOME; LIGHT_HOME="$(mktemp -d)"; export LIGHT_CONFIG="$LIGHT_HOME/config.sh"
+printf 'BIAS_K=0.05\nMONITOR_NITS_MIN=55\nMONITOR_NITS_MAX=400\nBIAS_MIN=2\nBIAS_MAX=40\nBIAS_OFF_LUX=80\nGOVEE_IPS=""\nBIAS_WALL_RHO="0.80"   # probe 07 check R, 2026-10-13\nBIAS_CAL="1:6,2:12"   # probe 07 check F, 2026-10-13\n' > "$LIGHT_CONFIG"
+stale="$(. lib/config_migrate.sh; config_stale_keys | LC_ALL=C sort | tr '\n' ' ')"
+bash lib/config_migrate.sh >/dev/null 2>&1
+check "config migration removes the retired bias keys (BIAS_K, MONITOR_NITS_*, BIAS_MIN, any value) and BIAS_MAX=40" \
+    "! grep -qE '^(BIAS_K|MONITOR_NITS_MIN|MONITOR_NITS_MAX|BIAS_MIN|BIAS_MAX)=' $LIGHT_CONFIG && [ \"\$stale\" = 'BIAS_K BIAS_MAX BIAS_MIN MONITOR_NITS_MAX MONITOR_NITS_MIN ' ]" "stale: $stale; $(cat $LIGHT_CONFIG)"
+check "…and keeps a custom BIAS_OFF_LUX and the measured GOVEE_IPS, BIAS_WALL_RHO (even = default) and BIAS_CAL" \
+    "grep -qx BIAS_OFF_LUX=80 $LIGHT_CONFIG && grep -qx 'GOVEE_IPS=\"\"' $LIGHT_CONFIG && grep -q '^BIAS_WALL_RHO=\"0.80\"   # probe 07' $LIGHT_CONFIG && grep -q '^BIAS_CAL=\"1:6,2:12\"' $LIGHT_CONFIG"
+
+# Probe 07 against the fake lights and a fake TSL2591 on the wall (lit by them).
+kill $GPID2 2>/dev/null; wait $GPID2 2>/dev/null; sleep 0.3
+probe_env
+PLOG="$TEST_TMP/govee-probe.log"; PST="$TEST_TMP/govee-probe.state"; : > "$PLOG"
+python3 test/fake_govee.py "$PLOG" H6056 --dev "$GA" ${GB:+--dev "$GB:noip"} --state "$PST" 2>/dev/null & GPID3=$!; PIDS="$PIDS $GPID3"
+python3 test/fake_wall_sensor.py 18097 "$PST" & SP=$!; PIDS="$PIDS $SP"; sleep 0.6
+export LIGHT_CONFIG="$LIGHT_HOME/config.sh"
+printf '# my overrides\nBRIGHTNESS_MAX=90\nGOVEE_IPS="%s"   # typed by hand\nFOO="a b"   # keep me\n' "$GA" > "$LIGHT_CONFIG"
+cp "$LIGHT_CONFIG" "$TEST_TMP/cfg.before"
+st0="$(fstate $GA)"
+bash -c 'exec -a lightd sleep 30' & FAKE_LIGHTD=$!; PIDS="$PIDS $FAKE_LIGHTD"; sleep 0.3
+mkdir -p "$LIGHT_HOME/state"; echo $FAKE_LIGHTD > "$LIGHT_HOME/state/lightd.pid"
+res="$(yes "" | head -5 | bash probe/07-govee.sh 2>&1)"
+check "probe 07 refuses to run while lightd runs, and sends nothing" \
+    "echo \"\$res\" | grep -q 'lightd (the adaptive loop) is running' && [ ! -s $PLOG ]" "$res"
+kill $FAKE_LIGHTD; rm -f "$LIGHT_HOME/state/lightd.pid"
+P07ENV="GOVEE_MCAST=${GB:-127.0.0.9} SENSOR_URL=http://127.0.0.1:18097/events SETTLE=0.05 WINDOW=0.3 STATUS_WAIT=0.1 HOLD=0.05 FLICKER_HOLD=0.05"
+res="$(yes y | env $P07ENV F_STEPS="1 2 3 4 5 6 8 10 20 50 100" bash probe/07-govee.sh 2>&1)"
+R07="$PROBE_RESULTS/07-govee.txt"
+check "probe 07 writes RESULT Q7, Q17 (the device count), Q18 (white path, and what the TSL2591 can't tell) and Q19" \
+    "grep -q '^RESULT Q7: LAN API: $NDEV light(s) replied' $R07 && grep -q '^RESULT Q17: $NDEV light(s) replied (sku H6056)' $R07 && grep -q \"^RESULT Q18: .*white path: .*can't tell chromaticity\" $R07 && grep -q '^RESULT Q19: ρ = 0.85 measured' $R07" \
+    "$(grep RESULT $R07; echo "$res" | tail -5)"
+check "probe 07 covers checks A–I and the ρ check" \
+    "for c in A B C D E F R G H I; do grep -q \"^\$c: \" $R07 || exit 1; done"
+check "probe 07 check F prints a BIAS_CAL line from the wall readings, and the % it gives (3 % ≈ 18 lx)" \
+    "grep -q '^F: BIAS_CAL=\"1:6.0,2:12.0,3:18.0,4:24.0,' $R07 && grep -q '18.5 lx → 3 %' $R07" "$(grep '^F:' $R07)"
+check "probe 07 saved GOVEE_IPS (replaced in place), BIAS_CAL and BIAS_WALL_RHO, each with a dated comment" \
+    "sed -n 3p $LIGHT_CONFIG | grep -q '^GOVEE_IPS=\"$IPS\"   # found by probe 07 check A, $(date +%Y-%m-%d)\$' && grep -q '^BIAS_CAL=\"1:6.0,.*\"   # probe 07 check F, .*$(date +%Y-%m-%d)\$' $LIGHT_CONFIG && grep -q '^BIAS_WALL_RHO=\"0.85\"   # probe 07 check R' $LIGHT_CONFIG" \
+    "$(cat $LIGHT_CONFIG)"
+check "…touched no other line, and backed up the config first" \
+    "[ \"\$(grep -vE '^(GOVEE_IPS|BIAS_CAL|BIAS_WALL_RHO)=' $LIGHT_CONFIG)\" = \"\$(grep -v '^GOVEE_IPS=' $TEST_TMP/cfg.before)\" ] && cmp -s \$(ls $LIGHT_HOME/config.sh.bak-* | head -1) $TEST_TMP/cfg.before"
+bash lib/config_migrate.sh >/dev/null 2>&1
+check "…and config_migrate keeps the three saved keys afterwards" \
+    "grep -q '^GOVEE_IPS=\"$IPS\"' $LIGHT_CONFIG && grep -q '^BIAS_CAL=' $LIGHT_CONFIG && grep -q '^BIAS_WALL_RHO=\"0.85\"' $LIGHT_CONFIG"
+check "probe 07 puts each light back as it found it ($st0)" "[ \"\$(fstate $GA)\" = '$st0' ]" "$(fstate $GA)"
+check "probe 07 never sent colorwc to the bars outside the probe's own Kelvin list" \
+    "! grep -o 'colorTemInKelvin\":[0-9]*' $PLOG | sed 's/.*://' | grep -qvxE '2200|2700|4000|5000|6000|6500|7000|9000|3000'"
+kill $GPID3 $SP 2>/dev/null
 
 echo
 echo "$PASS passed, $FAIL failed"

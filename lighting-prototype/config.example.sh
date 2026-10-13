@@ -83,12 +83,28 @@ CRITICAL_BRIGHTNESS=40            # freeze backlight here; empty = leave brightn
                                   # learned into Lunar's curve; turning the override off resumes it.
 
 # ── Bias light (Govee LAN) ─────────────────────────────────────────────────
-GOVEE_IPS=""                      # space-separated, e.g. "192.168.1.60 192.168.1.61"
-# AOC CU34G4Z, white luminance at default gains: KitGuru's colorimeter review measured
-# 55.2 cd/m2 at 0% and 371.6 at 100% (RESEARCH_07 section 2). One unit, not yours.
-MONITOR_NITS_MIN=55
-MONITOR_NITS_MAX=372
-BIAS_K=0.028                      # strip % per screen nit: a starting guess (372 nits → 0.028 × 372 ≈ 10.4%). Calibrate by eye
-BIAS_MIN=1
-BIAS_MAX=40
-BIAS_REFRESH=60                   # resend the current state this often (UDP has no ack)
+# docs/lighting-app/RESEARCH_08 sections 2–3, SPEC FR-60–FR-66. Setup: Govee app (2.4 GHz Wi-Fi,
+# LAN Control on for each light), then probe/07-govee.sh, which offers to save GOVEE_IPS,
+# BIAS_CAL and BIAS_WALL_RHO here in ~/.lighting/config.sh. Empty GOVEE_IPS = no bias light at all.
+GOVEE_IPS=""                      # space-separated, e.g. "192.168.1.60 192.168.1.61" (the H6056 pair may be two lights)
+GOVEE_K_MIN=2200                  # the H6056's rated white range (RESEARCH_08 section 1); nothing outside it is sent
+GOVEE_K_MAX=6500
+# Level: an absolute wall luminance, not tied to screen brightness. SMPTE ST 2080-3: the surround
+# is 5.0 ± 0.5 cd/m2. On a matte wall that needs E = π × BIAS_TARGET_NITS / BIAS_WALL_RHO lux
+# (≈ 19.6 lx at ρ 0.80), and the strip % for E comes from BIAS_CAL, the wall lux measured at each %.
+BIAS_TARGET_NITS=5.0
+BIAS_WALL_RHO=0.80                # a STARTING VALUE for white paint, until probe 07 measures your wall
+BIAS_CAL=""                       # "pct:lux,…" from probe 07 check F (TSL2591 flat on the wall). Empty = not calibrated
+# Used while BIAS_CAL is empty. UNVERIFIED: 400 lm on ~1 m2 of wall puts 5 cd/m2 near 3–8 %
+# if the output is linear (RESEARCH_08 section 2), so 5 % is a guess at the low end. lightd logs
+# once that the bias isn't calibrated.
+BIAS_FALLBACK_PCT=5
+BIAS_MAX=15                       # safety cap on the strip % whatever the table says (SPEC FR-62)
+# The room decides: above BIAS_OFF_LUX (filtered) the room already lights the wall past 5 cd/m2,
+# so the bars go off; back on below BIAS_ON_LUX. Starting values, UNVERIFIED (SPEC Q22).
+BIAS_OFF_LUX=60
+BIAS_ON_LUX=40
+BIAS_IN_CRITICAL=on               # colour-critical override: on = 6500 K at the same level; off = bars off
+BIAS_REFRESH=60                   # while on, resend brightness + Kelvin this often (UDP has no ack); never `turn 1`
+GOVEE_MIN_INTERVAL=2              # seconds: at most one update this often (changes in between are coalesced)
+GOVEE_GAP_MS=300                  # between datagrams to one bar (RESEARCH_08 section 3; 200 ms was UNVERIFIED)

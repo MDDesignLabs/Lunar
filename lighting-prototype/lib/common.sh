@@ -80,8 +80,10 @@ engine_targets() {  # <lf> <mode> [actual_b] [on_gains r:g:b]
         -v kbright_lux="$KELVIN_BRIGHT_LUX" -v kbright="$KELVIN_BRIGHT" -v kstep="$KELVIN_STEP" \
         -v kfloor="$KELVIN_FLOOR" -v table="$GAIN_TABLE" -v critical_gains="$CRITICAL_GAINS" \
         -v critical_brightness="$CRITICAL_BRIGHTNESS" \
-        -v nits_min="$MONITOR_NITS_MIN" -v nits_max="$MONITOR_NITS_MAX" \
-        -v bias_k="$BIAS_K" -v bias_min="$BIAS_MIN" -v bias_max="$BIAS_MAX" \
+        -v bias_nits="$BIAS_TARGET_NITS" -v bias_rho="$BIAS_WALL_RHO" -v bias_cal="$BIAS_CAL" \
+        -v bias_fallback="$BIAS_FALLBACK_PCT" -v bias_max="$BIAS_MAX" -v bias_critical="$BIAS_IN_CRITICAL" \
+        -v off_lux="$BIAS_OFF_LUX" -v on_lux="$BIAS_ON_LUX" -v bias_prev="$(state_get bias_room "")" \
+        -v gk_min="$GOVEE_K_MIN" -v gk_max="$GOVEE_K_MAX" \
         -v boffset="$(state_get bright_offset 0)"
 }
 

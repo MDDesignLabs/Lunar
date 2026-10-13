@@ -1,25 +1,59 @@
 #!/bin/bash
-# govee: talk to Govee strips over the LAN API from the shell.
+# govee: talk to Govee lights over the LAN API from the shell.
 #
-#   govee discover [secs]          scan (multicast :4001) and print replies received on :4002
+#   govee discover [secs] [--json]  join 239.255.255.250, scan (multicast + unicast to GOVEE_IPS) and
+#                                   print each device: ip, sku, device id (--json: the raw replies)
+#   govee status [ip...]            devStatus of each light (default: GOVEE_IPS): on/off, brightness, colour, K
+#   govee off-all [ip...]           turn 0, twice, to each light (default: GOVEE_IPS)
 #   govee on|off <ip>
 #   govee brightness <ip> <1-100>
-#   govee kelvin <ip> <K>
+#   govee kelvin <ip> <K>           raw: NOT clamped (lightd clamps to GOVEE_K_MIN..GOVEE_K_MAX)
 #   govee rgb <ip> <r> <g> <b>
-#   govee status <ip>              asks for devStatus (the reply arrives on :4002; use `discover` to see it)
 #   govee raw <ip> '<json>'
 
 . "$(dirname "$0")/../lib/common.sh"
 . "$PROTO_DIR/lib/govee.sh"
 
+targets() { if [ $# -gt 0 ]; then echo "$*"; else echo "$GOVEE_IPS"; fi; }
+
 case "$1" in
-    discover)   govee_discover "${2:-3}" ;;
+    discover)
+        secs=3 json=0
+        for a in "$2" "$3"; do case "$a" in --json) json=1 ;; [0-9]*) secs="$a" ;; esac; done
+        out="$(govee_discover "$secs")"
+        if [ $json = 1 ]; then [ -n "$out" ] && echo "$out"
+        elif [ -z "$out" ]; then echo "no replies (LAN Control on? same subnet? UDP 4002 free? Local Network allowed for Terminal?)"; exit 1
+        else
+            printf '%-16s %-8s %-24s %s\n' IP SKU DEVICE NOTE
+            echo "$out" | python3 -c 'import json, sys
+for l in sys.stdin:
+    try: d = json.loads(l)
+    except ValueError: continue
+    note = "no ip in reply: sender address used" if d.get("ip_from") == "sender" else ""
+    print("%-16s %-8s %-24s %s" % (d.get("ip", "?"), d.get("sku", "?"), d.get("device", "?"), note))'
+        fi
+        ;;
+    status)
+        shift; rc=0
+        [ -z "$(targets "$@")" ] && { echo "usage: govee status <ip>... (or set GOVEE_IPS)" >&2; exit 64; }
+        for ip in $(targets "$@"); do
+            r="$(govee_query "$ip" 2)" && echo "$ip  $r" || { echo "$ip  no devStatus reply"; rc=1; }
+        done
+        exit $rc
+        ;;
+    off-all)
+        shift
+        [ -z "$(targets "$@")" ] && { echo "usage: govee off-all <ip>... (or set GOVEE_IPS)" >&2; exit 64; }
+        for ip in $(targets "$@"); do govee_send_seq "$ip" "${GOVEE_GAP_MS:-300}" "$(govee_j_turn 0)" "$(govee_j_turn 0)" & done
+        wait
+        [ $# = 0 ] && state_set govee_on 0      # lightd's view of GOVEE_IPS: off
+        echo "off: $(targets "$@")"
+        ;;
     on)         govee_turn "$2" 1 ;;
     off)        govee_turn "$2" 0 ;;
     brightness) govee_brightness "$2" "$3" ;;
     kelvin)     govee_kelvin "$2" "$3" ;;
     rgb)        govee_rgb "$2" "$3" "$4" "$5" ;;
-    status)     govee_status "$2" ;;
     raw)        govee_send "$2" "$3" ;;
-    *)          sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 64 ;;
+    *)          sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 64 ;;
 esac

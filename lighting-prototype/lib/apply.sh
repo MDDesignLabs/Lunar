@@ -13,7 +13,7 @@ lunar_brightness() {
 # stores it as state "critical_rc", so `light`, lightd and the menu bar can tell.
 apply_targets() {
     local lf="$1" force="${2:-0}" mode actual_b k v rc=0 on
-    local kelvin=6500 brightness=0 red=50 green=50 blue=50 bias=0
+    local kelvin=6500 brightness=0 red=50 green=50 blue=50 bias=0 bias_k=6500 bias_room="" bias_cal=1
     mode="$(current_mode)"
 
     # A "brighter/dimmer" nudge is a correction for THIS lighting. When the room moves
@@ -29,13 +29,17 @@ apply_targets() {
         actual_b="$(lunar_brightness)"
     fi
 
+    # Computed first, not inside the here-doc: bash 5 printed a parse error ("trap: unexpected
+    # EOF while looking for matching `)'") when lightd's TERM trap fired mid-here-doc.
+    local tg; tg="$(engine_targets "$lf" "$mode" "$actual_b")"
     while IFS='=' read -r k v; do
         case "$k" in
             kelvin) kelvin="$v" ;; brightness) brightness="$v" ;;
             red) red="$v" ;; green) green="$v" ;; blue) blue="$v" ;; bias) bias="$v" ;;
+            bias_k) bias_k="$v" ;; bias_room) bias_room="$v" ;; bias_cal) bias_cal="$v" ;;
         esac
     done <<EOF
-$(engine_targets "$lf" "$mode" "$actual_b")
+$tg
 EOF
 
     if [ "$mode" = critical ]; then
@@ -55,7 +59,21 @@ EOF
             ddc_brightness "$brightness" "$force"
         fi
     fi
-    govee_apply "$bias" "$kelvin" "$force"
+    # Bias light (FR-61–FR-64). bias is the strip %, 0 = off (bright room, or the override with
+    # BIAS_IN_CRITICAL=off); bias_k is the screen's target K clamped to 2200–6500, or 6500
+    # in the override. Display sleep and exit are handled in lightd. GOVEE_IPS="" skips it all.
+    if [ -n "$GOVEE_IPS" ]; then
+        if [ -n "$bias_room" ] && [ "$bias_room" != "$(state_get bias_room '')" ]; then
+            state_set bias_room "$bias_room"     # the hysteresis memory (engine reads it back)
+            if [ "$bias_room" = 0 ]; then log "bias: room above ${BIAS_OFF_LUX} lx: off (the room already lights the wall)"
+            else log "bias: room below ${BIAS_ON_LUX} lx (or first decision): on"; fi
+        fi
+        if [ "$bias_cal" = 0 ] && [ "$(state_get bias_uncal_logged 0)" != 1 ]; then
+            state_set bias_uncal_logged 1
+            log "bias: not calibrated yet (BIAS_CAL is empty): using ${BIAS_FALLBACK_PCT}% (UNVERIFIED). Run probe/07-govee.sh check F"
+        fi
+        govee_apply "$bias" "$bias_k" "$force"
+    fi
 
     state_set target "kelvin=$kelvin brightness=$brightness gains=$red/$green/$blue bias=$bias mode=$mode"
     state_set kelvin "$kelvin"
