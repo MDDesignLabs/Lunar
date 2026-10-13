@@ -109,6 +109,13 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
   - Kelvin only stepping slowly.
 - Propose changes as new repo defaults, so the user gets them with `bin/light update` and never hand-edits config.sh.
 
+**Log of reviews**
+- **2026-10-13** (partial day, 12:00–14:xx):
+  - **Working as designed:** brightness held at 0% below 50 lx; no brightness writes needed (already 0); Kelvin rose 5000→5250 K as lux reached ~20; no nudges; no sensor dropouts.
+  - **Gain writes:** 7 per changing channel, all from restarts (update, reload, a manual restart). Each costs 2 (neutral on exit, warm on start). On a normal day expect ~2.
+  - **Open:** a midday reading of only ~5 lx is very low for daytime. Either the room was really that dark (blinds closed, no lamp), or the sensor isn't seeing the room (placement or facing). Asked the user. If it's placement, every value is skewed dim and warm.
+  - **Fixed:** the config clean-up was logged twice per update, because install.sh re-ran it.
+
 ## Bias light and light bar (2026-10-11)
 
 - **Govee:** the user bought what RESEARCH_08 identifies as the H6056 "Flow Plus" bars; confirm on the box. Plan in BUILD_PLAN Phase 0b. The order is:
