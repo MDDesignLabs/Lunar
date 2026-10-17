@@ -63,6 +63,21 @@ KELVIN_BRIGHT=6500
 KELVIN_STEP=250
 KELVIN_FLOOR=4000                 # never warmer than this, whatever the table or `light kelvin` asks
 KELVIN_MIN_INTERVAL=600           # seconds between adaptive gain sets
+# Time of day (SPEC FR-23, 2026-10-17). The room light decides how warm the screen gets, and
+# the clock limits it:
+#   - in the day the screen stays 6500 K however dark the room (true colours for design work);
+#   - from sunset a dark room warms to KELVIN_DIM;
+#   - from BEDTIME − 3 h it warms towards KELVIN_NIGHT, and stays there until the morning;
+#   - it's back to 6500 K at sunrise, or at BEDTIME + 8 h if that's earlier.
+# Each change ramps over TOD_RAMP_MIN. Sunrise and sunset come from the Mac's time zone
+# (Europe/Berlin, Asia/Amman, …), so after a move the Mac's own time zone is enough.
+# LATITUDE/LONGITUDE override the guess. TIME_OF_DAY=0 = room light only, as before.
+TIME_OF_DAY=1
+BEDTIME=23:00
+KELVIN_NIGHT=4000
+TOD_RAMP_MIN=60
+LATITUDE=""
+LONGITUDE=""
 GAIN_DAILY_CAP=30                 # per channel (conservative)
 GAIN_GAP_MS=100                   # pause between the R, G and B writes in one set
 # Kelvin:R:G:B calibration table. Measured by probe 05 on this desk's AOC on 2026-10-11

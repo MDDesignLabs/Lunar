@@ -3,7 +3,7 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **180 checks, all passing**, against simulators (2026-10-13, after the bias light, §12: 131 before, after `light update` and the config migration, §10: 110 before that, 97 before the RESEARCH_07 defaults and probe 08, 63 before the 2026-09-26 review fixes). Two checks (discovery over real multicast, §3 and §12) print SKIP instead where the machine has no multicast route, so the total there is 178. Where 127.0.0.2 can't be bound (macOS without a loopback alias), §12 uses one fake light and skips three more discovery checks. The full run takes about 6 minutes. The §12 checks weren't mutation-tested. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
+- `lighting-prototype/test/run_tests.sh`: **198 checks, all passing**, against simulators (2026-10-17, after the time of day, §13: 180 before, after the bias light, §12: 131 before that, after `light update` and the config migration, §10: 110 before that, 97 before the RESEARCH_07 defaults and probe 08, 63 before the 2026-09-26 review fixes). Two checks (discovery over real multicast, §3 and §12) print SKIP instead where the machine has no multicast route, so the total there is 196. Where 127.0.0.2 can't be bound (macOS without a loopback alias), §12 uses one fake light and skips three more discovery checks. The full run takes about 6 minutes. The §12 checks weren't mutation-tested. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
   - fake Govee lights on real UDP sockets (`test/fake_govee.py`: several addresses, a reply without `ip`, one that ignores multicast, a state model), and a fake TSL2591 on the wall that they light (`test/fake_wall_sensor.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
@@ -37,7 +37,7 @@ Only some of these have a shell check today (marked "shell §N"). The rest are s
 | U-B05 | All entries malformed | Returns the fallback (50) rather than crashing |
 | U-B06 | Your recovered curve (`0:21,13:31,23:34,39:39,71:41,80:44,100:45,135:47,160:49,190:54,224:58,313:69,565:91,702:99,800:100,1000:100`, Lunar's seed) at 1, 50, 100, 134, 300 and 800 lux, compensation off | 26, 40, 45, 47, 68, 100 (recomputed from `engine.awk`). *Corrected 2026-09-26:* the earlier 29/43 came from the corrupted paste with points 13–80 missing |
 
-### Kelvin and gains (FR-20/21)
+### Kelvin and gains (FR-20/21/23)
 
 | ID | Case | Expected |
 |---|---|---|
@@ -47,6 +47,11 @@ Only some of these have a shell check today (marked "shell §N"). The rest are s
 | U-G01 | Table interpolation 5250 K | 50/47/42 (shell §1) |
 | U-G02 | K outside the table | Clamps to the end rows |
 | U-G03 | No channel above neutral, for any K | `r ≤ nR, g ≤ nG, b ≤ nB`, even if the table has a higher value (shell §1) |
+| U-T01 | Time of day (FR-23, §13): dark room at noon | 6500 K; 19:15 → 5000 K; from 20:00 (bedtime − 3 h) → 4000 K, held overnight; 6500 K by 08:00 on a dark winter morning |
+| U-T02 | Sun times | Berlin 17 Oct within 15 min of 07:40 / 18:05; 21 Jun sunset after 21:15, 21 Dec before 16:15; Amman 21 Jun ≈ 19:45 |
+| U-T03 | Guards | A bright room is 6500 K at every hour; `KELVIN_FLOOR` still wins; colour-critical ignores the clock; `TIME_OF_DAY=0` restores room-light-only |
+| U-T04 | Location | Time-zone table, `LATITUDE`/`LONGITUDE` override, unknown zone → UTC offset at 45° N |
+| I-T01 | lightd's once-a-minute clock check | Noon, 0.5 lx: `tod_warm` 6500, no warm gains; 21:30: `tod_warm` 4000, warm gains sent |
 | U-C01 | `CCT_to_xy_CIE_D(6504.38938305)` | (0.3127077, 0.3291128) ± 1e-6 (colour-science doctest, R03 §1) |
 | U-C02 | McCamy at xy (0.3127, 0.3290) | 6505.08 ± 0.01 (colour-science doctest) |
 

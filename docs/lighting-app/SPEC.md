@@ -131,6 +131,15 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
 - **FR-20** Lux → Kelvin: smoothstep between (`KELVIN_DIM_LUX`, `KELVIN_DIM`) and (`KELVIN_BRIGHT_LUX`, `KELVIN_BRIGHT`), quantised to `KELVIN_STEP`, with a floor of `KELVIN_FLOOR` (default 4000 K). The floor is implemented in the prototype's `engine.awk` and `light kelvin`. [R03 §1]
 - **FR-21** Kelvin → R/G/B by linear interpolation over the measured `GAIN_TABLE`. No channel may exceed its neutral value; the prototype's engine now clamps gains to ≤ neutral (`CRITICAL_GAINS`). [R03 §3]
 - **FR-22** "Warm now" presets apply a temporary Kelvin until the next adaptive recompute.
+- **FR-23** Time of day (added 2026-10-17; the user works in a blackout room, so a dark room is not evening). The clock sets the warm end of FR-20's curve. Bright rooms stay 6500 K at every hour.
+  - **Day** (sunrise to sunset): 6500 K whatever the lux, so colours are true for UI/UX design work.
+  - **Evening**: from sunset, ramp to `KELVIN_DIM` (5000 K).
+  - **Night**: from `BEDTIME` − 3 h (default 23:00 → 20:00), ramp to `KELVIN_NIGHT` (4000 K) and hold until morning.
+  - **Morning**: back to 6500 K from sunrise, or from `BEDTIME` + 8 h if that's earlier.
+  - Each ramp takes `TOD_RAMP_MIN` (60). `KELVIN_FLOOR` still applies, and colour-critical mode ignores the clock.
+  - **Location**: sunrise and sunset come from the Mac's time zone (a table of cities: Berlin now, Amman after the planned move), with a `LATITUDE`/`LONGITUDE` override. An unknown zone falls back to its UTC offset at 45° N. A move needs no config edit.
+  - `TIME_OF_DAY=0` restores room-light-only behaviour.
+  - Write budget: a day adds about 20 gain sets from the ramps (6 + 4 + 10, paced by `KELVIN_MIN_INTERVAL`), against `GAIN_DAILY_CAP` 30. Daytime lux changes no longer move the Kelvin, which saves writes. Watch the count in the daily report. [shell §13]
 
 ### Override
 

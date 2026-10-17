@@ -41,10 +41,11 @@ function curve_eval(spec, lf,    raw, pts, kv, xs, ys, n, i, j, t, tx, ty) {
 
 function smoothstep(t) { t = clamp(t, 0, 1); return t * t * (3 - 2 * t) }
 
-function kelvin_for(lf,    lo, hi, t, k) {
+function kelvin_for(lf,    lo, hi, t, k, kd) {
     lo = log10(kdim_lux); hi = log10(kbright_lux)
     t = (hi == lo) ? (lf >= hi) : smoothstep((lf - lo) / (hi - lo))
-    k = kdim + t * (kbright - kdim)
+    kd = (tod == 1) ? tod_warm() : kdim             # the clock moves the dark-room end
+    k = kd + t * (kbright - kd)
     k = round(k / kstep) * kstep
     return (kfloor != "" && k < kfloor + 0) ? kfloor + 0 : k
 }
@@ -123,7 +124,57 @@ function bias_room_on(lf, prev, off_lux, on_lux,    lux) {
     return (lux > off_lux) ? 0 : 1
 }
 
+# ── Time of day (SPEC FR-23) ────────────────────────────────────────────────
+# Inputs: clock = "doy:minute:utcoffset" (e.g. "290:1215:+0200"), lat, lon (degrees, east +),
+# bed = "HH:MM", knight (Kelvin), ramp (minutes), kdim, kbright.
+function acos(x) { x = clamp(x, -1, 1); return atan2(sqrt(1 - x * x), x) }
+function hhmm(s,    a) { return (split(s, a, ":") == 2) ? a[1] * 60 + a[2] : -1 }
+function lerp(a, b, t) { t = clamp(t, 0, 1); return a + t * (b - a) }
+# Sunrise and sunset in local minutes (NOAA's simple solar formulas, about ±2 min). Polar day or
+# night clamps to "always up"/"never up". Sets SUNRISE and SUNSET.
+function sun_times(doy, lat, lon, off,    pi, g, eqt, decl, rl, ha) {
+    pi = atan2(0, -1); g = 2 * pi / 365 * (doy - 1)
+    eqt = 229.18 * (0.000075 + 0.001868 * cos(g) - 0.032077 * sin(g) - 0.014615 * cos(2 * g) - 0.040849 * sin(2 * g))
+    decl = 0.006918 - 0.399912 * cos(g) + 0.070257 * sin(g) - 0.006758 * cos(2 * g) + 0.000907 * sin(2 * g) \
+         - 0.002697 * cos(3 * g) + 0.00148 * sin(3 * g)
+    rl = lat * pi / 180
+    ha = acos(cos(90.833 * pi / 180) / (cos(rl) * cos(decl)) - tan_(rl) * tan_(decl)) * 180 / pi
+    SUNRISE = 720 - 4 * (lon + ha) - eqt + off
+    SUNSET = 720 - 4 * (lon - ha) - eqt + off
+}
+function tan_(x) { return sin(x) / cos(x) }
+# The warmest Kelvin the clock allows now: 6500 in the day; from sunset towards kdim, and from
+# bedtime − 3 h towards knight (each over `ramp` minutes); held until the morning, then back to
+# 6500 over `ramp` from sunrise, or from bedtime + 8 h if that's earlier (dark winter mornings).
+function tod_warm(    c, m, off, sgn, bm, ls, ds, w, r) {
+    if (split(clock, c, ":") != 3) return kdim
+    m = c[2] + 0; sgn = (substr(c[3], 1, 1) == "-") ? -1 : 1
+    off = sgn * (substr(c[3], 2, 2) * 60 + substr(c[3], 4, 2))
+    sun_times(c[1] + 0, lat + 0, lon + 0, off)
+    r = (ramp + 0 > 0) ? ramp + 0 : 60
+    bm = hhmm(bed); if (bm < 0) bm = 23 * 60
+    ls = (bm - 180 + 1440) % 1440; if (ls < 720) ls = 1440      # bedtime before 15:00: no late phase
+    ds = (bm + 480) % 1440; if (SUNRISE < ds) ds = SUNRISE
+    TOD_PHASE = "day"
+    if (m < 720) {                                               # after midnight
+        if (m < ds) { TOD_PHASE = "night"; return knight }
+        if (m < ds + r) { TOD_PHASE = "morning"; return lerp(knight, kbright, (m - ds) / r) }
+        return kbright
+    }
+    w = kbright
+    if (m >= SUNSET) { w = lerp(kbright, kdim, (m - SUNSET) / r); TOD_PHASE = "evening" }
+    if (m >= ls && lerp(kbright, knight, (m - ls) / r) < w) { w = lerp(kbright, knight, (m - ls) / r); TOD_PHASE = "night" }
+    return w
+}
+function clock_str(m) { m = (m + 1440) % 1440; return sprintf("%02d:%02d", int(m / 60), int(m % 60)) }
+
 BEGIN {
+    if (cmd == "tod") {
+        # awk -f engine.awk -v cmd=tod -v clock=... -v lat -v lon -v bed -v knight -v kdim -v kbright -v ramp
+        w = tod_warm()
+        printf "phase=%s\nwarm_end=%d\nsunrise=%s\nsunset=%s\n", TOD_PHASE, w, clock_str(SUNRISE), clock_str(SUNSET)
+        exit
+    }
     if (cmd == "biaspct") {
         # awk -f engine.awk -v cmd=biaspct -v bias_nits=5 -v bias_rho=0.8 -v bias_cal=... -v bias_fallback=5 -v bias_max=15
         p = bias_pct(bias_nits, bias_rho, bias_cal, bias_fallback)

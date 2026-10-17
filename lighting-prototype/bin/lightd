@@ -113,6 +113,7 @@ find "$LIGHT_HOME" -maxdepth 1 -name 'samples-*.csv' -mtime +30 -exec rm -f {} +
 
 prev_lf="$(state_get filtered "")"
 acted_lf="$(state_get acted "")"
+tod_t=0
 acted_mode=""
 disp_was_asleep=0
 [ -x "$DISPLAY_STATE" ] || log "no display-state helper at $DISPLAY_STATE: display sleep while the Mac is awake goes unnoticed (run probe/00-setup.sh)"
@@ -191,6 +192,16 @@ while true; do
         [ "$mode" = adaptive ] && [ "$(state_get gains_pending 0)" = 1 ] && retry=1
         [ "$mode" = adaptive ] && [ "$(state_get brightness_pending 0)" = 1 ] && retry=1
         [ "$mode" = critical ] && [ "$(state_get critical_rc 0)" = 4 ] && retry=1
+
+        # Time of day (FR-23): the clock moves the white point even when the room doesn't.
+        # Checked once a minute; a change in the warmest allowed Kelvin re-applies.
+        if [ "${TIME_OF_DAY:-0}" = 1 ] && [ "$mode" = adaptive ] && [ $(( $(now) - tod_t )) -ge 60 ]; then
+            tod_t="$(now)"
+            tod_w="$(tod_info | sed -n 's/^warm_end=//p')"
+            if [ "$tod_w" != "$(state_get tod_warm "")" ]; then
+                state_set tod_warm "$tod_w"; retry=1
+            fi
+        fi
 
         if [ "$moved" = 1 ] || [ "$force" = 1 ] || [ "$retry" = 1 ] || [ "$mode" != "$acted_mode" ]; then
             apply_targets "$prev_lf" "$force"

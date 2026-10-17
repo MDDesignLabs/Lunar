@@ -33,9 +33,11 @@ GOVEE_IPS=127.0.0.1
 BIAS_REFRESH=3600
 OTHER_DDC_APPS=FakeDDCApp
 GAIN_TABLE="6500:50:50:50,5500:50:47:44,5000:50:46:40,4500:50:44:36"
+TIME_OF_DAY=0
 $1
 EOF
 }
+# TIME_OF_DAY=0 above: §1–§12 were written for room-light-only Kelvin; §13 checks the clock.
 # GAIN_TABLE above: the original example table, which §1–§9 were written against (50/46/40 at
 # 5000K, 50/44/36 at 4500K). The measured default (probe 05) is checked in §10.
 calls() { local c; c="$(grep -c "$1" "$MOCK_DIR/calls.log" 2>/dev/null)"; echo "${c:-0}"; }
@@ -793,6 +795,59 @@ check "probe 07 puts each light back as it found it ($st0)" "[ \"\$(fstate $GA)\
 check "probe 07 never sent colorwc to the bars outside the probe's own Kelvin list" \
     "! grep -o 'colorTemInKelvin\":[0-9]*' $PLOG | sed 's/.*://' | grep -qvxE '2200|2700|4000|5000|6000|6500|7000|9000|3000'"
 kill $GPID3 $SP 2>/dev/null
+
+echo "── 13. Time of day: the clock limits how warm the screen gets (FR-23)"
+fresh "TIME_OF_DAY=1
+BEDTIME=23:00
+KELVIN_NIGHT=4000
+TOD_RAMP_MIN=60
+KELVIN_DIM=5000"
+. lib/common.sh
+export LIGHT_TZ=Europe/Berlin
+k_at() { LIGHT_CLOCK="$1" engine_targets "$2" adaptive | sed -n 's/^kelvin=//p'; }
+ti_at() { LIGHT_CLOCK="$1" tod_info | sed -n "s/^$2=//p"; }
+# 17 October (day 290, CEST): published Berlin times are about 07:40 and 18:05.
+check "Berlin, 17 Oct: sunrise and sunset within 15 min of the published 07:40 / 18:05" \
+    "awk -v r=\$(ti_at 290:720:+0200 sunrise | awk -F: '{print \$1*60+\$2}') -v s=\$(ti_at 290:720:+0200 sunset | awk -F: '{print \$1*60+\$2}') 'BEGIN { exit !(r > 445 && r < 475 && s > 1070 && s < 1100) }'" \
+    "sunrise $(ti_at 290:720:+0200 sunrise), sunset $(ti_at 290:720:+0200 sunset)"
+check "Berlin, 21 Jun: sunset after 21:15; 21 Dec: before 16:15" \
+    "[ \"\$(ti_at 172:720:+0200 sunset)\" \> 21:15 ] && [ \"\$(ti_at 355:720:+0100 sunset)\" \< 16:15 ]"
+check "noon in a dark room (0.5 lux, blackout blinds): 6500K, not 5000K" "[ \$(k_at 290:720:+0200 -0.30103) = 6500 ]"
+check "the same dark room an hour after sunset (19:15): KELVIN_DIM 5000K" "[ \$(k_at 290:1155:+0200 -0.30103) = 5000 ]"
+check "half-way through the sunset ramp (18:40): between 5000 and 6500, in 250K steps" \
+    "k=\$(k_at 290:1120:+0200 -0.30103); [ \$k -gt 5000 ] && [ \$k -lt 6500 ] && [ \$((k % 250)) = 0 ]"
+check "from bedtime − 3 h (20:00) towards KELVIN_NIGHT: 4000K by 21:00, held at 02:00" \
+    "[ \$(k_at 290:1260:+0200 -0.30103) = 4000 ] && [ \$(k_at 290:120:+0200 -0.30103) = 4000 ]"
+check "a bright room (300 lux) is 6500K at every hour" \
+    "for c in 290:720:+0200 290:1155:+0200 290:1290:+0200 290:120:+0200; do [ \$(k_at \$c 2.4771) = 6500 ] || exit 1; done"
+check "dark winter morning: back to 6500K by 08:00, from bedtime + 8 h (07:00), before the 08:15 sunrise" \
+    "[ \$(k_at 355:400:+0100 -0.30103) = 4000 ] && [ \$(k_at 355:480:+0100 -0.30103) = 6500 ]"
+check "KELVIN_FLOOR still wins (KELVIN_NIGHT=3000 → 4000K at 02:00)" "[ \$(KELVIN_NIGHT=3000 k_at 290:120:+0200 -0.30103) = 4000 ]"
+check "TIME_OF_DAY=0 is room light only, as before (noon, 0.5 lux → 5000K)" "[ \$(TIME_OF_DAY=0 k_at 290:720:+0200 -0.30103) = 5000 ]"
+check "the bias light follows the clock's Kelvin too (21:30 → bias_k 4000)" \
+    "LIGHT_CLOCK=290:1290:+0200 engine_targets -0.30103 adaptive | grep -qx bias_k=4000"
+check "colour-critical ignores the clock (02:00 → 6500K)" "LIGHT_CLOCK=290:120:+0200 engine_targets -0.30103 critical | grep -qx kelvin=6500"
+check "Asia/Amman uses Amman's sun: 21 Jun sunset ≈ 19:45 (±15 min)" \
+    "s=\$(LIGHT_TZ=Asia/Amman ti_at 172:720:+0300 sunset); [ \"\$s\" \> 19:30 ] && [ \"\$s\" \< 20:00 ]"
+check "an unknown time zone falls back to the UTC offset (+0300 → 45° N, 45° E)" \
+    "[ \"\$(LIGHT_TZ=Mars/Olympus TZ= tz_coords)\" = \"45 \$(date +%z | awk '{ s = (substr(\$1,1,1)==\"-\") ? -1 : 1; printf \"%.2f\", s*(substr(\$1,2,2)+substr(\$1,4,2)/60)*15 }')\" ]"
+check "LATITUDE/LONGITUDE override the time zone" "[ \"\$(LATITUDE=10 LONGITUDE=20 tz_coords)\" = '10 20' ]"
+check "light status shows the clock line (phase, sunrise, sunset, zone)" \
+    "LIGHT_CLOCK=290:1290:+0200 bin/light status 2>/dev/null | grep -q '^clock: *night: warmest allowed 4000K   sunrise 0[67]:[0-9][0-9], sunset 18:[0-9][0-9] (Europe/Berlin), bedtime 23:00'" \
+    "$(LIGHT_CLOCK=290:1290:+0200 bin/light status 2>&1 | grep clock)"
+# lightd itself, dark room (0.5 lux): at noon the gains stay neutral; at 21:30 they go warm.
+# Each run records "tod_warm state|number of blue writes below 50".
+for c in 290:720:+0200 290:1290:+0200; do
+    fresh "LUX_SOURCE=direct GOVEE_IPS= SENSOR_URL=http://127.0.0.1:18095/events TIME_OF_DAY=1"
+    python3 test/fake_sensor.py 18095 0.2 0.5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+    LIGHT_CLOCK=$c bin/lightd & DPID=$!; sleep 3; kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP 2>/dev/null
+    r="$(cat $LIGHT_HOME/state/tod_warm 2>/dev/null)|$(grep -cE 'set blue ([0-9]|[1-4][0-9])$' $MOCK_DIR/calls.log)"
+    case $c in 290:720:*) tw_noon="$r" ;; *) tw_night="$r" ;; esac
+done
+check "lightd at noon in a dark room: the clock check ran (tod_warm 6500), no warm gains sent" "[ '$tw_noon' = '6500|0' ]" "$tw_noon"
+check "lightd at 21:30 in the same room: tod_warm 4000, and a warm blue gain was sent" \
+    "case '$tw_night' in 4000\|0) false ;; 4000\|*) true ;; *) false ;; esac" "$tw_night"
+unset LIGHT_TZ
 
 echo
 echo "$PASS passed, $FAIL failed"

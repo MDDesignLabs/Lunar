@@ -71,9 +71,56 @@ unlock() { [ "$(cat "$STATE/.lock/pid" 2>/dev/null)" = "$$" ] && rm -rf "$STATE/
 last_wake() { sysctl -n kern.waketime 2>/dev/null | sed -n 's/.*sec = \([0-9]*\).*/\1/p'; }
 
 # Compute targets for a filtered log-lux value. Prints key=value lines.
+# ── Time of day (FR-23) ──
+# The Mac's time-zone name (Europe/Berlin), from $TZ or /etc/localtime. LIGHT_TZ overrides (tests).
+tz_name() {
+    local z="${LIGHT_TZ:-${TZ:-}}"
+    [ -n "$z" ] || z="$(readlink /etc/localtime 2>/dev/null)"
+    echo "${z#*zoneinfo/}"
+}
+# "lat lon" for the time zone: a city in it, close enough for sunset (±10 min). LATITUDE and
+# LONGITUDE override. Unknown zones fall back to the UTC offset (15° per hour) at 45° N.
+tz_coords() {
+    if [ -n "$LATITUDE" ] && [ -n "$LONGITUDE" ]; then echo "$LATITUDE $LONGITUDE"; return; fi
+    case "$(tz_name)" in
+        Europe/Berlin)                echo "52.52 13.40" ;;
+        Asia/Amman)                   echo "31.95 35.93" ;;
+        Europe/London)                echo "51.51 -0.13" ;;
+        Europe/Paris|Europe/Brussels) echo "48.86 2.35" ;;
+        Europe/Amsterdam)             echo "52.37 4.90" ;;
+        Europe/Vienna)                echo "48.21 16.37" ;;
+        Europe/Zurich)                echo "47.37 8.54" ;;
+        Asia/Dubai)                   echo "25.20 55.27" ;;
+        Asia/Riyadh)                  echo "24.71 46.68" ;;
+        Africa/Cairo)                 echo "30.04 31.24" ;;
+        Asia/Beirut)                  echo "33.89 35.50" ;;
+        Asia/Jerusalem|Asia/Hebron|Asia/Gaza) echo "31.77 35.21" ;;
+        America/New_York)             echo "40.71 -74.01" ;;
+        America/Los_Angeles)          echo "34.05 -118.24" ;;
+        *) date +%z | awk '{ s = (substr($1, 1, 1) == "-") ? -1 : 1; printf "45 %.2f\n", s * (substr($1, 2, 2) + substr($1, 4, 2) / 60) * 15 }' ;;
+    esac
+}
+# "doy:minute:utcoffset" now, e.g. 290:1215:+0200. LIGHT_CLOCK overrides (tests).
+clock_now() {
+    [ -n "$LIGHT_CLOCK" ] && { echo "$LIGHT_CLOCK"; return; }
+    date '+%j %H %M %z' | awk '{ printf "%d:%d:%s\n", $1, $2 * 60 + $3, $4 }'
+}
+tod_args() {
+    local ll; ll="$(tz_coords)"
+    TOD_ARGS="-v tod=${TIME_OF_DAY:-0} -v clock=$(clock_now) -v lat=${ll% *} -v lon=${ll#* } -v bed=${BEDTIME:-23:00} -v knight=${KELVIN_NIGHT:-4000} -v ramp=${TOD_RAMP_MIN:-60}"
+}
+# phase=…, warm_end=…, sunrise=…, sunset=… for `light status`.
+tod_info() {
+    tod_args
+    # shellcheck disable=SC2086
+    awk -f "$ENGINE" -v cmd=tod $TOD_ARGS -v kdim="$KELVIN_DIM" -v kbright="$KELVIN_BRIGHT"
+}
+
 engine_targets() {  # <lf> <mode> [actual_b] [on_gains r:g:b]
     local lf="$1" mode="$2" actual_b="$3" on_gains="$4"
-    awk -f "$ENGINE" -v cmd=targets -v lf="$lf" -v mode="$mode" -v actual_b="$actual_b" -v on_gains="$on_gains" \
+    tod_args
+    # shellcheck disable=SC2086
+    awk -f "$ENGINE" -v cmd=targets $TOD_ARGS -v lf="$lf" -v mode="$mode" -v actual_b="$actual_b" -v on_gains="$on_gains" \
         -v curve="$BRIGHTNESS_CURVE" -v bmin="$BRIGHTNESS_MIN" -v bmax="$BRIGHTNESS_MAX" \
         -v comp="$LUMINANCE_COMPENSATION" -v gamma="$GAIN_GAMMA" \
         -v kdim_lux="$KELVIN_DIM_LUX" -v kdim="$KELVIN_DIM" \

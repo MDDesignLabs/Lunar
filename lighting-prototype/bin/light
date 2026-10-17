@@ -121,6 +121,12 @@ case "$1" in
         echo "lux:       $(state_get lux '?') (filtered log10: $(state_get filtered '?'))"
         echo "target:    $(state_get target '?')"
         echo "offset:    $(state_get bright_offset 0) (brightness nudge)   display: $(display_state)"
+        if [ "${TIME_OF_DAY:-0}" = 1 ]; then
+            ti="$(tod_info)"; tv() { echo "$ti" | sed -n "s/^$1=//p"; }
+            echo "clock:     $(tv phase): warmest allowed $(tv warm_end)K   sunrise $(tv sunrise), sunset $(tv sunset) ($(tz_name)), bedtime $BEDTIME"
+        else
+            echo "clock:     off (TIME_OF_DAY=0: the room light alone sets the white point)"
+        fi
         if [ -n "$GOVEE_IPS" ]; then
             case "$(state_get govee_on '')" in
                 1) b="on $(state_get govee_pct '?')% $(state_get govee_k '?')K" ;; 0) b=off ;; *) b=unknown ;; esac
