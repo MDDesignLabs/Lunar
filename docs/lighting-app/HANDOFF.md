@@ -11,6 +11,7 @@ For a Claude session running **on the user's Mac** (Desktop app or `claude remot
 - **Configuration:** `BACKEND=m1ddc`, `LUX_SOURCE=direct`. `GOVEE_IPS=""` until probe 07 saves the bars' addresses (below).
 - **Monitor OSD:** User mode, R/G/B = 50/50/50. The baseline equals neutral.
 - **Already built by probe 00:** m1ddc (stock) and m1ddc-1x. The Xcode licence has been accepted. The Command Line Tools are installed.
+- **Work (2026-10-17):** UI/UX product design. Colour matters, but the target is sRGB/D65 screens, not print or grading. So RESEARCH_09 Q5 is "moderate": the screen's own white point matters far more than the bias light's CRI. Keep the Govee if probe 07 checks E, F and I pass; the DIY kit is optional. Open: whether the screen's white should follow the time of day as well as the room light. The blackout room is dark at noon too, so lux alone warms the screen to 5000 K during the working day.
 - **Wi-Fi:** the ESP32 shows about 33% ping loss and 160–270 ms round trips, probably ESPHome's Wi-Fi power saving. Probe 02 will show whether the event stream itself drops out.
 
 ## Rules the user set
