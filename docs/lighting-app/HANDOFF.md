@@ -121,6 +121,7 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
 
 The H6056 bars are here. The shell fixes are in (P0b-T02, T03, T05, T06; untested on hardware). The user's steps, in order:
 - **Govee Home app:** add both bars on **2.4 GHz** Wi-Fi; each light → Settings → **LAN Control** on (it can take minutes to show). Note the model on the box (Q17). Reserve the bars' IPs on the router.
+- **Mount the bars** per RESEARCH_08 §1a (2026-10-17): upright on the brackets behind the monitor, aimed at the wall and slightly up; no LED visible from the chair, no reflections on the screen. The user's Gemini answer was about a strip, and most of it doesn't apply to bars. Still open: the wall gap and the wall colour.
 - `git pull` (or `bin/light update`), then **stop lightd**: `launchctl bootout gui/$(id -u)/com.lighting.lightd`.
 - **Run `bash lighting-prototype/probe/07-govee.sh`** (≈ 30 min). Before checks E, F and R: room dark, the TSL2591 flat on the wall behind the monitor; a sheet of white paper for the ρ check; the phone for check I. Say "y" to saving `GOVEE_IPS`, `BIAS_CAL` and `BIAS_WALL_RHO`.
 - Paste `probe/results/07-govee.txt` (the `RESULT Q7/Q17/Q18/Q19` lines) for review: watch check B ("brightness switches an off bar on"), check E (white path) and the % check F lands on.

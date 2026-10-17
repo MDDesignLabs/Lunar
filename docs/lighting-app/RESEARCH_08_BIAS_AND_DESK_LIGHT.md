@@ -36,6 +36,33 @@ Source tags: [G#] Govee/standards, [X#] Xiaomi/Apple (§8). [R05], [R07] are loc
 - **CRI unknown**; the TSL2591 can't measure chromaticity, so D65 accuracy needs a colorimeter.
 - **Not used:** cloud (2 req/s, internet [G15]), BLE (writes dropped on other models [G14]), Matter (only via Apple Home/Shortcuts).
 
+### 1a. Physical setup for this desk (2026-10-17)
+
+The user asked for the best physical setup and shared a Gemini answer. That answer is about a **stick-on RGBICWW strip**; B0FWCWTMQD is a pair of **light bars** (Govee's own listing: "lay flat, stand upright, or use the included brackets to mount behind the TV or monitor", for displays "less than 45 inches" [G25]). How each of its points applies here:
+
+| Gemini's point | For the H6056 bars |
+|---|---|
+| Strips are hard to bend round corners | **Doesn't apply**: rigid bars, no corners |
+| A curved screen gives hotspots, because the strip's distance to the wall varies | **Mostly doesn't apply**: the bars sit behind the screen's centre and aim at the wall, so the curve hardly changes their distance to it |
+| RGBIC strips can't be cut to length | **Doesn't apply** |
+| The warm and cool white LEDs give true 2700–6500 K whites, not an RGB mix | **Right in principle, but it may not hold over LAN.** Govee's LAN guide says a Kelvin command is "converted into the color value of red, green and blue" [G9], so LAN white may skip the white LEDs. Probe 07 check E settles it. This is the real colour risk, not the strip-vs-bar question |
+| Buy a G1 kit, Hue Play bars or a COB strip instead | **No need**: the Hue Play is the same form factor as these bars. Other Govee models' LAN support is unknown, and the bars already work with the prototype |
+| Static ambient light or screen-reactive colour? | **Static.** lightd drives a slow, eye-strain-oriented bias light (5 cd/m², following the screen's Kelvin). Screen sync needs Govee's camera or HDMI box and isn't in scope |
+
+**Recommended setup** (AOC CU34G4Z: 80.8 × 36.8 × 10.9 cm without the stand, VESA 100 [M1]):
+1. **Check the box says H6056 / "Flow Plus" light bars (Q17).** If it's a strip, the table above doesn't apply; tell me.
+2. **Mount both bars upright on the brackets on the back of the monitor**, one each side of the stand's neck, about a third of the way in from each edge. Aim them at the wall and slightly up. Lighting the back of the cabinet, not the wall, lets the light spread out [C1]. The bars are about 24.5 cm long [D1, UNVERIFIED], shorter than the screen's 36.8 cm height, so from your chair they stay hidden behind it.
+3. **What should light up is the wall you can see around the screen**: mostly above it, a little at the sides. SMPTE ST 2080-3's surround is the field around the display, not the wall straight behind it. If you have room, raise the bars so the top pool clears the screen's top edge.
+4. **Wall gap:** measure from the monitor's back to the wall. CinemaQuest warns that a panel close to the wall leaves "too little room for the light to spread" [C1]. Under about 10 cm you get a small, bright pool, so turn the bars to face more sideways. With 15 cm or more, upright is fine (both figures are judgement, not from a source). lightd's level is set from the measured wall light (`BIAS_CAL`), so the gap changes the evenness of the light, not its brightness.
+5. **Wall colour:** neutral, white to grey, and matte [C1]. A coloured wall tints the light: tell me the colour if it isn't white.
+6. **Three checks after mounting** (lights off, sitting in your normal position):
+   - (a) you can't see any LED directly;
+   - (b) with the screen off and the bars on, there are no LED dots or glare reflected on the screen [K1];
+   - (c) the TSL2591 on the bezel doesn't see the bars. Probe 07 check F measures the bezel lux with the bias light on and off, and a rise means lightd would brighten the screen because of its own bias light.
+7. **Desk-stand fallback:** if the brackets don't fit the stand's neck, stand the bars upright on the desk behind the monitor, aimed at the wall. It's the same light; there are only more cables to see.
+
+**Brightness check:** a vendor rule of thumb is "about 10 % of the monitor's peak SDR white" [K1]. On this monitor that's 5.5–37 cd/m², and the night end (screen at 0 %, ~55 cd/m²) matches the ST 2080-3 5 cd/m² target used here. No change needed.
+
 ---
 
 ## 2. How bright, what colour
@@ -178,6 +205,7 @@ Status 2026-10-13: written and tested against `test/fake_govee.py` (two fake lig
 ## 8. Sources
 
 Checked sources carry their URL. The rest are listed with URLs in the research agents' reports of 2026-10-11 (session scratchpad, not in the repo).
+- **Physical setup (§1a, 2026-10-17; vendor pages, so starting points):** [G25] Govee US, RGBICWW Light Bar listing (via search extract), https://us.govee.com/products/govee-rgbicww-light-bar; [D1] Datacompagniet listing, 245 × 38 × 44 mm, https://eshop.datacompagniet.dk/govee-rgbicww-wifi-bluetooth-flow/cat-p/c/p1003758967/l_en (retailer; Galaxus lists 28.6 cm for the set); [M1] AOC CU34G4Z dimensions, https://shop.post.ch/en/electronics/peripherals-printers/monitors/aoc-monitor-cu34g4z/p/873849 and https://aoc.com/hr-en/gaming/products/monitors/cu34g4z; [C1] CinemaQuest, https://cinemaquestinc.com/ideal_lume.htm and https://cinemaquestinc.com/blb.htm; [K1] KTC, https://us.ktcplay.com/blogs/support-tips/how-to-position-bias-lighting (vendor blog).
 - **Govee:** [G1] Amazon.es B0FWCWTMQD; [G2] Govee EU/UK H6056; [G4] FCC 2A7VD-H6056; [G5] H6056 manual ✓ (2.4 GHz); [G7] govee-local-api; [G9] Govee WLAN guide, https://app-h5.govee.com/user-manual/wlan-guide; [G10] openHAB Govee binding ✓, https://www.openhab.org/addons/bindings/govee/; [G12][G13] govee2mqtt code and issues; [G14] lasswellt/govee-homeassistant; [G15] Govee API rate limits; [G24] smarthomeassistant.co.uk ✓ (local control; the two-IPs claim not verified).
 - **Standards:** [G16] SMPTE ST 2080-3:2017 ✓, https://pub.smpte.org/pub/st2080-3/st2080-3-2017.pdf; [G19] ITU-R WP6C contribution C-0234 ✓, https://nabanet.com/wp-content/uploads/2024/04/R19-WP6C-C-0234MSW-E.pdf; [G20] Flanders Scientific, *Reference Viewing Environment* ✓, https://flandersscientific.com/uploads/tech-resources/ReferenceViewingEnvironment.pdf.
 - **Xiaomi/Apple:** [X1]–[X17] Xiaomi and Yeelight specs, manuals, HA threads; [X18] https://github.com/ebinf/lightbar2mqtt; [X23] Apple HIG, Notifications, https://developer.apple.com/design/human-interface-guidelines/notifications. Apple APIs (`UNUserNotificationCenter`, `UNNotificationCategory`, `UNNotificationAction`, `removeDeliveredNotifications(withIdentifiers:)`, `.passive`) were read by the research agent, not re-checked.
