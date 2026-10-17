@@ -28,6 +28,7 @@ Everything about this project is in Markdown here, plus the prototype in `lighti
 | [RESEARCH_07_BRIGHTNESS_CURVE.md](RESEARCH_07_BRIGHTNESS_CURVE.md) | How bright the screen should be for the room; this monitor's measured range |
 | [RESEARCH_08_BIAS_AND_DESK_LIGHT.md](RESEARCH_08_BIAS_AND_DESK_LIGHT.md) | Govee H6056 bias light (5 cd/m², SMPTE ST 2080-3) and the Xiaomi light bar |
 | [RESEARCH_09_BIAS_PRODUCT_AND_SYSTEM.md](RESEARCH_09_BIAS_PRODUCT_AND_SYSTEM.md) | Which bias light suits this setup (Govee vs Hue, Elgato, LIFX, MediaLight, DIY CCT strip on ESPHome), and a check of the whole brightness system |
+| [RESEARCH_10_ROOM_LAMP.md](RESEARCH_10_ROOM_LAMP.md) | Which room lamp to buy (side uplighter + E27 bulb: IKEA KAJPLATS/DIRIGERA vs Shelly vs Hue vs Govee), placement against 1500R reflections, and how the app should drive it without a sensor feedback loop |
 
 ## History and reference
 | File | What it's for |
