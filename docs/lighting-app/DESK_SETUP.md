@@ -59,7 +59,7 @@ Status: 2026-10-17. One page for the whole desk. The details live in the linked 
 | Room lamp to the side, uplighter style | ✅ Decided | 2026-10-17 |
 | Room lamp bulb: Shelly (€20) vs Hue (€66) vs IKEA (€100) | ❓ Open: your choice | — |
 | Should the app control the room lamp ("ask once, then follow")? Off at bedtime? | ❓ Open | — |
-| Switch the bias light to an LED strip | 🔄 **Leaning yes** (2026-10-21): bars give two pools, not an even glow; CRI 80; probe 07 found no LAN reply. Buy list: BUY_BIAS_STRIP.md (≈ €92–103). Return the Govee within Amazon's window | 2026-10-21 |
+| Switch the bias light to an LED strip | 🔄 **Leaning yes** (2026-10-21): bars give two pools, not an even glow; CRI 80; probe 07 found no LAN reply. Buy list: BUY_BIAS_STRIP.md. **User prefers ready-made: Hue Play Gradient Lightstrip PC 32–34″ + Hue Bridge (≈ €145)**; the DIY CRI 95 kit (≈ €92–103) stays as the alternative. Return the Govee within Amazon's window | 2026-10-21 |
 | Dimming below the backlight's floor | ➖ Not now: revisit after a week with the bias light | 2026-10-17 |
 
 ## Still needed from me

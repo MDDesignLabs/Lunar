@@ -2,6 +2,18 @@
 
 Status: 2026-10-21. Prices were read from the shops' own pages today (✓) unless marked. They change, so check the basket. Background: RESEARCH_09 §3 and DESK_SETUP.md.
 
+## Ready-made option, no assembly (2026-10-21; the user prefers this)
+**Philips Hue Play Gradient Lightstrip for PC, 32–34″** + **Hue Bridge**
+- **Price:** strip €109.68 on [Amazon.de](https://www.amazon.de/Philips-Hue-Lightstrip-steuerbar-kompatibel/dp/B0BB6NM186) (ASIN B0BB6NM186) ✓. Bridge from €33.99 (idealo, RESEARCH_10 [H7]). Total ≈ **€145**. Hue's own DE "Starter Set + Bridge" is listed at €109.99 (was €219.99) but marked "nicht mehr verfügbar" ✓.
+- **Specs (philips-hue.com ✓):**
+  - 116.5 cm, not cuttable, mounts with the included clips and bends round the monitor's corners;
+  - 2000–6500 K, **CRI > 80**, 1000 lm at 4000 K, 19 W;
+  - "gradient coloured and white light (RGBICW)".
+- **App control:** the Hue Bridge has a documented local REST API (CLIP v2; R09 [H1]: about 10 commands/s to a light, 1/s to groups). No cloud is needed ("works without Wi-Fi"). It's the easiest backend for our app to add.
+- **Low end:** 1 % of ~1000 lm ≈ 10 lm, below the ~20–30 lm the bias needs (R09), so it can dim low enough.
+- **Trade-off:** the white is the same class as the Govee's (CRI 80, not 95). The gain over the Govee is an even glow, a reliable local API and monitor-specific mounting.
+
+## The build-it option below
 ## Why this one
 - **Even glow:** a continuous COB line around the back of the monitor, not two pools of light.
 - **Real white:** separate warm (2700 K) and cool (6500 K) white LEDs, CRI 95. The Govee bars are CRI 80 on the EU label.
