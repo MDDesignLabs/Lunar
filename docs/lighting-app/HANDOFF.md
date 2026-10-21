@@ -123,6 +123,7 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
   - **Not updated:** Kelvin stayed 5000 K at noon in a 4 lx room, and the bias % was 2 (the old screen-proportional formula). So the Mac still runs the pre-2026-10-17 code without FR-23: `bin/light update` hadn't been run.
   - **Stopped:** lightd logged a clean "exit" at 16:36:50 and no restart, so the state since then is stale. Ask what stopped it (shutdown, logout, probe, `bootout`).
   - **Changed:** `light report` now prints whether lightd is running and whether time of day is on (with the day's sunset), so the next review sees both at a glance (shell §11, 200 checks).
+  - **Fixed the same day:** the user ran `bin/light update`. `launchctl bootstrap` then gave "5: Input/output error" because the job was already loaded, which is harmless. `light status` confirms the new code: `clock: day`, 6500 K at 5 lx (FR-23 working), Berlin sunrise 07:40 and sunset 18:01. Today's writes so far are brightness 5 and gains 5/7/7, from the update and restarts.
 
 ## Govee arrived (2026-10-13)
 
