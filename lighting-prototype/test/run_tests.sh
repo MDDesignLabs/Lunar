@@ -596,6 +596,12 @@ check "light report prints the config, an hourly row, the write counts and the e
     "echo \"\$rep\" | grep -q '== Lighting report for' && echo \"\$rep\" | grep -q '^  [0-2][0-9]:00 ' && echo \"\$rep\" | grep -q 'brightness [1-9][0-9]*, red' && echo \"\$rep\" | grep -q 'lightd start'" "$(echo "$rep" | head -20)"
 check "…and counts your nudges (light brighter is logged as a user action)" "echo \"\$rep\" | grep -q '(1 nudges or manual changes by you)'"
 check "light report rejects a malformed date" "! bin/light report 12-10-2026 >/dev/null 2>&1"
+check "light report says whether lightd is running (stopped here → NOT RUNNING) and that time of day is off (TIME_OF_DAY=0)" \
+    "echo \"\$rep\" | grep -q '^lightd: NOT RUNNING' && echo \"\$rep\" | grep -q '^clock:  time of day OFF'"
+echo TIME_OF_DAY=1 >> "$LIGHT_CONFIG"
+rep_on="$(LIGHT_TZ=Europe/Berlin bin/light report 2026-10-19 2>&1)"
+check "…and with TIME_OF_DAY=1 it shows the day's sunset (Berlin, 19 Oct ≈ 18:0x)" \
+    "echo \"\$rep_on\" | grep -q '^clock:  time of day ON: .*from sunset 18:0[0-9].*(Europe/Berlin)'" "$(echo "$rep_on" | grep '^clock')"
 
 echo "── 12. Bias light (Govee H6056): transport, level, states, rate limits (FR-60–FR-66)"
 kill $GPID 2>/dev/null; wait $GPID 2>/dev/null; sleep 0.3          # §3's single fake light
