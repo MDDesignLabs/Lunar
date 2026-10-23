@@ -9,6 +9,7 @@
 . "$(dirname "$0")/../lib/common.sh"
 . "$PROTO_DIR/lib/ddc.sh"
 . "$PROTO_DIR/lib/govee.sh"
+. "$PROTO_DIR/lib/hue.sh"
 . "$PROTO_DIR/lib/apply.sh"
 
 NEUTRAL_ON_EXIT="${NEUTRAL_ON_EXIT:-1}"
@@ -45,10 +46,10 @@ cleanup() {
     rm -f "$FIFO"
     unlock                    # if the signal arrived mid-write, release our own lock first
     # Bias light off on a clean stop (FR-64), sent twice. A crash leaves the last state; the
-    # next start corrects it (govee_invalidate below). Nothing is sent with GOVEE_IPS="".
-    if [ -n "$GOVEE_IPS" ]; then
+    # next start corrects it (bias_invalidate below). Nothing is sent with no bias light set.
+    if bias_set; then
         log "exit: bias light off"
-        govee_apply 0 "$(state_get govee_k 6500)" 1
+        bias_apply 0 "$(bias_last_k)" 1
     fi
     if [ "$NEUTRAL_ON_EXIT" = 1 ]; then
         log "exit: writing neutral gains so the monitor isn't left warm"
@@ -83,7 +84,7 @@ fi
 state_set running 1
 echo $$ > "$STATE/lightd.pid"     # lets the probes (and you) check whether lightd is running
 # The bars may hold anything (a crash, the Govee app, a probe): send the full state once.
-[ -n "$GOVEE_IPS" ] && { govee_invalidate; state_set bias_uncal_logged 0; }
+bias_set && { bias_invalidate; state_set bias_uncal_logged 0; }
 ddc_prune_counts
 # The override is restored first, before any lux sample arrives (the sensor may be offline).
 if [ "$(current_mode)" = critical ]; then
@@ -168,9 +169,9 @@ while true; do
         ds="$(display_state)"
         sample_log "$ds"
         if [ "$ds" = asleep ]; then
-            [ $disp_was_asleep = 0 ] && log "display asleep: pausing DDC writes${GOVEE_IPS:+, bias light off}"
+            [ $disp_was_asleep = 0 ] && log "display asleep: pausing DDC writes${HUE_BRIDGE:+, bias light off}${HUE_BRIDGE:-${GOVEE_IPS:+, bias light off}}"
             disp_was_asleep=1
-            govee_apply 0 "$(state_get govee_k 6500)"
+            bias_set && bias_apply 0 "$(bias_last_k)"
             continue
         fi
         if [ $disp_was_asleep = 1 ]; then
@@ -211,7 +212,7 @@ while true; do
         else
             # Nothing changed enough for DDC; the bias light may still have a target held back
             # by its 2 s limit, or be due its 60 s refresh.
-            govee_tick
+            bias_tick
         fi
     done < "$FIFO"
 

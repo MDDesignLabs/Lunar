@@ -14,7 +14,7 @@ Status: 2026-10-17. One page for the whole desk. The details live in the linked 
 | Computer | Mac Studio (Apple Silicon), macOS 26.7 | Runs the app (`lightd`, the shell prototype) | ✅ In use |
 | Monitor | **AOC CU34G4Z**: 34″ 3440 × 1440 VA, 1500R curve, 80.8 × 36.8 × 10.9 cm without stand, VESA 100 | Adaptive brightness and white point over DDC (m1ddc) | ✅ In use. Measured range ≈ 55–372 cd/m² (KitGuru; RESEARCH_07). OSD: User mode, R/G/B 50/50/50 |
 | Light sensor | ESP32 + TSL2591 on ESPHome, `lunarsensor.local` (192.168.0.163) | Room light (lux) for the app | ✅ In use, on the top bezel facing me |
-| Bias light | **Govee H6056 "Flow Plus" RGBICWW light bars** (2 bars + brackets; Amazon.de B0FWCWTMQD), arrived 2026-10-13 | Soft glow on the wall behind the screen, driven by the app over the LAN | 🔄 Not set up yet. EU label: CRI 80, R9 2, white slightly green of D65 (EPREL 857551). Probe 07 still to run |
+| Bias light | **Govee H6056 "Flow Plus" RGBICWW light bars** (2 bars + brackets; Amazon.de B0FWCWTMQD), arrived 2026-10-13 | Soft glow on the wall behind the screen, driven by the app over the LAN | ↩️ To be returned (Amazon, ~30 days from 2026-10-13). LAN control worked (2026-10-23, 192.168.0.28), but the light spread unevenly on the curved ultrawide |
 | Desk light | **Xiaomi monitor light bar ("lite")**, model number unknown (Q20) | Lights the desk and keyboard, not the screen | ✅ Owned. Probably remote-only, so the app will only ever **ask** (FR-80) |
 | Room light | Unknown: tell me what's there | — | ❓ Missing a side lamp |
 | Software | `lightd` shell prototype (this repo); Lunar's Pro licence expired (not used) | Brightness curve, time-of-day white point, bias light | ✅ Running under launchd |
@@ -37,7 +37,7 @@ Status: 2026-10-17. One page for the whole desk. The details live in the linked 
 
 | Need | Choice | Cost | Source |
 |---|---|---|---|
-| Bias light | **Keep the Govee H6056**, if probe 07 checks E, F and I pass | €0 (owned) | RESEARCH_09 |
+| Bias light | **Hue Play Gradient Lightstrip for PC 32–34″** (starter kit with Bridge, 929003498602; or the strip 929003498601 + a Bridge) | ≈ €130–145 | BUY_BIAS_STRIP.md |
 | Bias fallback | CRI 95 CCT LED strip in an aluminium diffuser channel + **QuinLED An-Penta-Mini** (ESPHome) + 24 V supply; screw terminals, no soldering | ≈ €90–120 | RESEARCH_09 §3 |
 | Bias, easier plug-in alternative | CCT strip + a ready-made WLED controller (Athom ESP32-C3 RGBCCT, or Gledopto) | ≈ €50–80 (UNVERIFIED) | RESEARCH_09 §3 (Athom listed as the alternative controller) |
 | Desk light | **Keep the Xiaomi bar** | €0 (owned) | RESEARCH_08 §6 |
@@ -59,7 +59,7 @@ Status: 2026-10-17. One page for the whole desk. The details live in the linked 
 | Room lamp to the side, uplighter style | ✅ Decided | 2026-10-17 |
 | Room lamp bulb: Shelly (€20) vs Hue (€66) vs IKEA (€100) | ❓ Open: your choice | — |
 | Should the app control the room lamp ("ask once, then follow")? Off at bedtime? | ❓ Open | — |
-| Switch the bias light to an LED strip | 🔄 **Leaning yes** (2026-10-21): bars give two pools, not an even glow; CRI 80; probe 07 found no LAN reply. Buy list: BUY_BIAS_STRIP.md. **User prefers ready-made: Hue Play Gradient Lightstrip PC 32–34″ + Hue Bridge (≈ €145)**; the DIY CRI 95 kit (≈ €92–103) stays as the alternative. Return the Govee within Amazon's window | 2026-10-21 |
+| Switch the bias light to an LED strip | ✅ **Decided 2026-10-23: Hue Play Gradient Lightstrip for PC 32–34″ + Hue Bridge.** The Govee test worked (LAN at 192.168.0.28), but the bars spread unevenly to the sides on the wide, curved screen. The app's Hue support is built (FR-68, `bin/hue pair`). Earlier notes (2026-10-21): bars give two pools, not an even glow; CRI 80; probe 07 found no LAN reply. Buy list: BUY_BIAS_STRIP.md. **User prefers ready-made: Hue Play Gradient Lightstrip PC 32–34″ + Hue Bridge (≈ €145)**; the DIY CRI 95 kit (≈ €92–103) stays as the alternative. Return the Govee within Amazon's window | 2026-10-21 |
 | Dimming below the backlight's floor | ➖ Not now: revisit after a week with the bias light | 2026-10-17 |
 
 ## Still needed from me

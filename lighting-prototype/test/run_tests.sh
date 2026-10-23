@@ -41,6 +41,14 @@ EOF
 # GAIN_TABLE above: the original example table, which §1–§9 were written against (50/46/40 at
 # 5000K, 50/44/36 at 4500K). The measured default (probe 05) is checked in §10.
 calls() { local c; c="$(grep -c "$1" "$MOCK_DIR/calls.log" 2>/dev/null)"; echo "${c:-0}"; }
+# Stop a lightd: TERM, wait up to 5 s, and send TERM again if the first was lost (bash can drop
+# a signal that lands mid-fork; seen 2026-10-23). A second TERM is reported, never hidden.
+stop_d() {
+    kill -TERM "$1" 2>/dev/null
+    local i=0; while kill -0 "$1" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+    if kill -0 "$1" 2>/dev/null; then echo "  NOTE: lightd ($1) needed a second TERM"; kill -TERM "$1" 2>/dev/null; fi
+    wait "$1" 2>/dev/null
+}
 eng() { awk -f lib/engine.awk "$@"; }
 
 PIDS=""
@@ -194,7 +202,7 @@ bin/lightd & DPID=$!; PIDS="$PIDS $DPID"
 # Wait until lightd has caught up with the stream (≤ 20 s), not a fixed time.
 for i in $(seq 1 100); do [ "$(cat $LIGHT_HOME/state/lux 2>/dev/null)" = 5.0 ] && break; sleep 0.2; done
 sleep 1
-kill -TERM $DPID; wait $DPID 2>/dev/null
+stop_d $DPID
 n_red="$(calls 'set red')"; n_blue="$(calls 'set blue')"; n_lum="$(calls 'set luminance')"
 check "parsed lux from the right SSE id (last lux ≈ 5)" "[ \"\$(cat $LIGHT_HOME/state/lux)\" = 5.0 ]" "lux=$(cat $LIGHT_HOME/state/lux 2>/dev/null)"
 check "white point warmed as the room dimmed (blue went below 50)" "grep 'set blue' $MOCK_DIR/calls.log | grep -qv 'blue 50$'"
@@ -233,7 +241,7 @@ check "Lunar's two-line property output is parsed (lunar_get returns 55)" \
     "echo 55 > $MOCK_DIR/lunar_brightness; . lib/common.sh; [ \"\$(LUNAR=$ROOT/test/mocks/lunar lunar_get external brightness)\" = 55 ]"
 bin/light critical off >/dev/null
 check "critical OFF → Lunar adaptation resumed" "grep -q 'adaptivePaused false' $MOCK_DIR/calls.log"
-kill -TERM $DPID; wait $DPID 2>/dev/null
+stop_d $DPID
 
 echo "── 7. Hardware probes against a simulated AOC + sensor (plumbing, not the real monitor)"
 FAKEBIN="$(mktemp -d)"; printf '#!/bin/sh\nexit 0\n' > "$FAKEBIN/open"; chmod +x "$FAKEBIN/open"
@@ -347,7 +355,7 @@ check "probe 08 Part B: a screen that lights the sensor → 'significant' with t
 echo "── 8. No-Lunar setup: direct lux, DDC-app guard, nudges, display sleep"
 fresh "LUX_SOURCE=direct KELVIN_MIN_INTERVAL=0 GOVEE_IPS= SENSOR_URL=http://127.0.0.1:18084/events"
 python3 test/fake_sensor.py 18084 0.2 40 40 40 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
-bin/lightd & DPID=$!; sleep 3; kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+bin/lightd & DPID=$!; sleep 3; stop_d $DPID; kill $SP
 check "LUX_SOURCE=direct reads the ESP32 stream" "[ \"\$(cat $LIGHT_HOME/state/lux 2>/dev/null)\" = 40.0 ]"
 
 fresh; . lib/common.sh; . lib/ddc.sh
@@ -398,7 +406,7 @@ n_sleep_start="$(wc -l < $MOCK_DIR/calls.log)"
 sleep 3
 n_sleep_end="$(wc -l < $MOCK_DIR/calls.log)"
 echo awake > "$MOCK_DIR/display"; sleep 2
-kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+stop_d $DPID; kill $SP
 check "no DDC writes while the display sleeps, even as the room dims" "[ $n_sleep_start = $n_sleep_end ]"
 check "display sleep and wake are logged" "grep -q 'display asleep' $LIGHT_HOME/lightd.log && grep -q 'display woke' $LIGHT_HOME/lightd.log"
 check "after wake, values are re-sent (writes resume)" "[ \$(wc -l < $MOCK_DIR/calls.log) -gt $n_sleep_end ]"
@@ -408,7 +416,7 @@ fresh "GOVEE_IPS= SENSOR_URL=http://127.0.0.1:18086/events"
 python3 test/fake_sensor.py 18086 0.2 300 300 300 -1 -1 -1 -1 -1 -1 -1 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 3
 res2="$(bin/lightd 2>&1)"; rc=$?
-kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+stop_d $DPID; kill $SP
 check "a negative lux sample (Lunar's -1) is ignored, not treated as darkness" \
     "[ \"\$(cat $LIGHT_HOME/state/lux)\" = 300.0 ] && ! grep -q 'set blue 40' $MOCK_DIR/calls.log"
 check "a second lightd refuses to start while one is running" "[ $rc = 1 ] && echo \"\$res2\" | grep -q 'already running'"
@@ -416,7 +424,7 @@ check "a second lightd refuses to start while one is running" "[ $rc = 1 ] && ec
 fresh "GOVEE_IPS= KELVIN_MIN_INTERVAL=4 TAU_DOWN=1 SENSOR_URL=http://127.0.0.1:18087/events"
 python3 test/fake_sensor.py 18087 0.2 300 300 300 300 300 5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 7
-kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+stop_d $DPID; kill $SP
 check "a gain set deferred by the interval is applied later, though lux has stopped moving" \
     "grep -q 'set blue 40' $MOCK_DIR/calls.log"
 
@@ -425,14 +433,14 @@ fresh "GOVEE_IPS= KELVIN_MIN_INTERVAL=3600 SENSOR_URL=http://127.0.0.1:18089/eve
 state_set last_red 50; state_set last_green 50; state_set last_blue 50; state_set last_t_gainset "$(now)"   # the previous run just wrote neutral on exit
 python3 test/fake_sensor.py 18089 0.2 5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 2.5
-kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+stop_d $DPID; kill $SP
 check "after a restart in a dim room, the warm white point is applied at once, not after the gain interval" \
     "grep -q 'set blue 40' $MOCK_DIR/calls.log"
 
 fresh "GOVEE_IPS= BRIGHTNESS_MIN_INTERVAL=4 TAU_UP=1 BRIGHTNESS_CURVE=\"0:10,10:20,40:35,100:50,300:70,1000:100\" SENSOR_URL=http://127.0.0.1:18088/events"
 python3 test/fake_sensor.py 18088 0.2 5 5 5 5 5 1000 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 7
-kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+stop_d $DPID; kill $SP
 check "a brightness write deferred by the interval is applied later, though lux has stopped moving" \
     "[ \$(cat $LIGHT_HOME/state/last_brightness) = 100 ]" "last brightness=$(cat $LIGHT_HOME/state/last_brightness 2>/dev/null)"
 
@@ -440,7 +448,7 @@ fresh "GOVEE_IPS= KELVIN_MIN_INTERVAL=3600 NEUTRAL_ON_EXIT=0 SENSOR_URL=http://1
 . lib/common.sh
 state_set mode critical; state_set running 0; state_set last_red 50; state_set last_green 46; state_set last_blue 40
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 2
-kill -TERM $DPID; wait $DPID 2>/dev/null
+stop_d $DPID
 check "lightd restores the override at start, before any lux arrives (sensor offline)" \
     "grep -q 'set blue 50' $MOCK_DIR/calls.log && [ \$(cat $LIGHT_HOME/state/mode) = critical ]"
 
@@ -448,7 +456,7 @@ fresh "GOVEE_IPS= NEUTRAL_ON_EXIT=0 SENSOR_URL=http://127.0.0.1:18099/events"
 . lib/common.sh
 state_set running 1; state_set last_red 50; state_set last_green 46; state_set last_blue 40
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 2
-kill -TERM $DPID; wait $DPID 2>/dev/null
+stop_d $DPID
 check "after an unclean exit, lightd resets gains to neutral first" \
     "grep -q 'did not exit cleanly' $LIGHT_HOME/lightd.log && grep -q 'set blue 50' $MOCK_DIR/calls.log"
 
@@ -527,7 +535,7 @@ BRIGHTNESS_CURVE=\"$SEED\"
 GAIN_GAMMA=2.2
 BRIGHTNESS_MAX=90"
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 1.5
-kill -TERM $DPID; wait $DPID 2>/dev/null
+stop_d $DPID
 check "lightd warns once at start for each key with an old value (seed curve, GAIN_GAMMA=2.2), not for a custom one" \
     "[ \$(grep -c 'config.sh overrides BRIGHTNESS_CURVE with an old value; run bin/light update' $LIGHT_HOME/lightd.log) = 1 ] && [ \$(grep -c 'overrides GAIN_GAMMA with an old value' $LIGHT_HOME/lightd.log) = 1 ] && ! grep -q 'overrides BRIGHTNESS_MAX' $LIGHT_HOME/lightd.log" \
     "$(grep overrides $LIGHT_HOME/lightd.log)"
@@ -587,7 +595,7 @@ fresh "GOVEE_IPS= SAMPLE_LOG_SECS=1 SENSOR_URL=http://127.0.0.1:18096/events"
 python3 test/fake_sensor.py 18096 0.2 300 300 300 100 30 10 5 5 5 5 5 5 5 5 5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 4
 bin/light brighter >/dev/null
-sleep 1; kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+sleep 1; stop_d $DPID; kill $SP
 SF="$LIGHT_HOME/samples-$(date +%Y-%m-%d).csv"
 check "lightd records lux and targets for the report (samples-<date>.csv, several rows)" \
     "[ -f \"$SF\" ] && [ \$(( \$(wc -l < \"$SF\") - 1 )) -ge 2 ] && head -1 \"$SF\" | grep -q '^time,lux,display,mode,target_brightness'" "$(head -3 "$SF" 2>/dev/null)"
@@ -738,7 +746,7 @@ echo awake > "$MOCK_DIR/display"
 for i in $(seq 1 40); do [ "$(gcount 'colorTemInKelvin')" -ge $(( 2 * NDEV )) ] && break; sleep 0.2; done
 check "display wakes → the bars come back on (turn 1 before brightness)" \
     "gseq $GA | grep -q 'turn=0 turn=0 turn=1 turn=1 brightness=3'" "$(gseq $GA)"
-sleep 2.2; kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+sleep 2.2; stop_d $DPID; kill $SP
 check "clean exit → turn 0, twice, as the last datagrams to each light (FR-64)" \
     "[ \"\$(gseq $GA | awk '{ print \$(NF - 1), \$NF }')\" = 'turn=0 turn=0' ] && grep -q 'exit: bias light off' $LIGHT_HOME/lightd.log" "$(gseq $GA)"
 check "every lightd datagram to one light was ≥ 300 ms after the previous one" "gaps_ok"
@@ -751,7 +759,7 @@ python3 test/fake_sensor.py 18098 0.3 5 5 5 300 300 300 & SP=$!; PIDS="$PIDS $SP
 : > "$GLOG2"
 bin/lightd & DPID=$!; PIDS="$PIDS $DPID"; sleep 2; echo asleep > "$MOCK_DIR/display"; sleep 1.5; echo awake > "$MOCK_DIR/display"; sleep 1.5
 bin/light critical on >/dev/null; bin/light critical off >/dev/null; bin/light bias 5 >/dev/null
-kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP
+stop_d $DPID; kill $SP
 check "GOVEE_IPS=\"\": lightd and light send nothing, store no bias state and log nothing about it" \
     "[ ! -s $GLOG2 ] && ! ls $LIGHT_HOME/state | grep -q '^govee_\|^bias_' && ! grep -qi 'govee\|bias' $LIGHT_HOME/lightd.log" \
     "$(cat $GLOG2; ls $LIGHT_HOME/state; grep -i 'govee\|bias' $LIGHT_HOME/lightd.log)"
@@ -851,7 +859,7 @@ check "light status shows the clock line (phase, sunrise, sunset, zone)" \
 for c in 290:720:+0200 290:1290:+0200; do
     fresh "LUX_SOURCE=direct GOVEE_IPS= SENSOR_URL=http://127.0.0.1:18095/events TIME_OF_DAY=1"
     python3 test/fake_sensor.py 18095 0.2 0.5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
-    LIGHT_CLOCK=$c bin/lightd & DPID=$!; sleep 3; kill -TERM $DPID; wait $DPID 2>/dev/null; kill $SP 2>/dev/null
+    LIGHT_CLOCK=$c bin/lightd & DPID=$!; sleep 3; stop_d $DPID; kill $SP 2>/dev/null
     r="$(cat $LIGHT_HOME/state/tod_warm 2>/dev/null)|$(grep -cE 'set blue ([0-9]|[1-4][0-9])$' $MOCK_DIR/calls.log)"
     case $c in 290:720:*) tw_noon="$r" ;; *) tw_night="$r" ;; esac
 done
@@ -867,12 +875,65 @@ state_set() { printf '%s' "$2" > "$LIGHT_HOME/state/$1"; }
 state_set tod_warm 1234                 # as if the clock had moved since the last reading
 b0="$(calls 'set blue')"
 for i in 1 2 3 4 5 6 7 8; do [ "$(cat $LIGHT_HOME/state/tod_warm)" = 4000 ] && break; sleep 1; done
-kill -TERM $DPID; wait $DPID 2>/dev/null
+stop_d $DPID
 check "sensor offline: lightd still re-applies when the clock moves (tod_warm back to 4000, logged once)" \
     "[ \"\$(cat $LIGHT_HOME/state/tod_warm)\" = 4000 ] && [ \$(grep -c 'sensor offline: the clock still moves' $LIGHT_HOME/lightd.log) = 1 ]" \
     "tod_warm=$(cat $LIGHT_HOME/state/tod_warm); $(grep -c 'sensor offline' $LIGHT_HOME/lightd.log) log lines"
 unset -f state_set; . lib/common.sh
 unset LIGHT_TZ
+
+echo "── 14. Hue bias light (fake Hue Bridge over HTTP): pairing, level, states, rate limits (FR-68)"
+HD="$(mktemp -d)"; GRAD=11111111-aaaa-4bbb-8ccc-000000000001
+python3 test/fake_hue.py 18078 "$HD" & HP=$!; PIDS="$PIDS $HP"; sleep 0.5
+fresh "GOVEE_IPS=127.0.0.1 HUE_SCHEME=http HUE_MIN_INTERVAL=0 HUE_FADE_MS=0"
+export HUE_SCHEME=http
+pair_out="$(bin/hue pair 127.0.0.1:18078 2>&1 & sleep 1.5; touch "$HD/linkpressed"; wait)"
+check "hue pair waits for the link button, then saves the key (mode 600, not in config.sh) and picks the gradient strip" \
+    "[ \"\$(cat $LIGHT_HOME/hue_key)\" = fake-app-key-0123456789 ] && [ \"\$(stat -c %a $LIGHT_HOME/hue_key 2>/dev/null || stat -f %Lp $LIGHT_HOME/hue_key)\" = 600 ] && grep -q '^HUE_BRIDGE=\"127.0.0.1:18078\"' $LIGHT_CONFIG && grep -q '^HUE_LIGHT=\"$GRAD\"' $LIGHT_CONFIG && ! grep -q fake-app-key $LIGHT_CONFIG" \
+    "$pair_out"
+. lib/common.sh; . lib/govee.sh; . lib/hue.sh
+puts() { grep -c . "$HD/puts.log" 2>/dev/null || echo 0; }
+lastput() { tail -n 1 "$HD/puts.log" | cut -d' ' -f2-; }
+check "Hue wins over GOVEE_IPS when both are set; neither → none" \
+    "[ \"\$(bias_backend)\" = hue ] && [ \"\$(HUE_BRIDGE= GOVEE_IPS= bias_backend)\" = none ]"
+check "Kelvin → mirek: 6500 → 154, 4000 → 250, 2000 → 500, 9000 → clamped 153" \
+    "[ \$(hue_mirek 6500) = 154 ] && [ \$(hue_mirek 4000) = 250 ] && [ \$(hue_mirek 2000) = 500 ] && [ \$(hue_mirek 9000) = 153 ]"
+bias_apply 5 4000
+check "coming on sends on + brightness + mirek in one PUT, to the chosen light" \
+    "[ \$(puts) = 1 ] && lastput | grep -q '\"on\":{\"on\":true}' && lastput | grep -q '\"brightness\":5' && lastput | grep -q '\"mirek\":250' && grep -q '^$GRAD ' $HD/puts.log" "$(cat $HD/puts.log)"
+bias_apply 5 4000; bias_apply 5 4050
+check "no change, or under 100 K, sends nothing" "[ \$(puts) = 1 ]"
+bias_apply 6 4050
+check "a 1 % change sends brightness only (no 'on', no mirek)" \
+    "[ \$(puts) = 2 ] && lastput | grep -q '\"brightness\":6' && ! lastput | grep -q '\"on\"' && ! lastput | grep -q mirek" "$(lastput)"
+bias_apply 0 4000
+check "0 % switches it off" "[ \$(puts) = 3 ] && lastput | grep -q '\"on\":{\"on\":false}'"
+bias_apply 0 4000
+check "…once (off again sends nothing)" "[ \$(puts) = 3 ]"
+state_set hue_ms 0; HUE_MIN_INTERVAL=5 bias_apply 7 5000; n1=$(puts); HUE_MIN_INTERVAL=5 bias_apply 8 5000; n2=$(puts)
+check "rate limit: a second change inside HUE_MIN_INTERVAL is held back (pending), and hue_tick sends the latest" \
+    "[ $n1 = 4 ] && [ $n2 = 4 ] && [ \"\$(state_get hue_pending)\" = 1 ] && HUE_MIN_INTERVAL=0 bias_tick && [ \$(puts) = 5 ] && lastput | grep -q '\"brightness\":8'"
+touch "$HD/fail"
+for i in 1 2 3 4; do bias_apply $((10 + i)) 5000; done
+check "3 failed updates in a row log 'not responding' once; light status says NOT RESPONDING" \
+    "[ \$(grep -c 'hue: bias light not responding' $LIGHT_HOME/lightd.log) = 1 ] && bin/light status | grep -q 'NOT RESPONDING'"
+rm -f "$HD/fail"; bias_apply 20 5000
+check "…and recovery is logged, with the latest target sent" \
+    "grep -q 'hue: bias light responding again' $LIGHT_HOME/lightd.log && lastput | grep -q '\"brightness\":20'"
+check "bin/hue status reads the strip back from the bridge" "bin/hue status | grep -q 'Play gradient PC  on  brightness 20.0%  5000K'" "$(bin/hue status 2>&1)"
+check "bin/light bias drives the Hue strip and reports where" \
+    "bin/light bias 9 6500 | grep -q 'bias on 9% 6500K → Hue bridge 127.0.0.1:18078' && lastput | grep -q '\"mirek\":154'"
+bash lib/config_migrate.sh >/dev/null 2>&1
+check "config_migrate keeps HUE_BRIDGE and HUE_LIGHT" "grep -q '^HUE_BRIDGE=' $LIGHT_CONFIG && grep -q '^HUE_LIGHT=' $LIGHT_CONFIG"
+check "the key never reaches lightd.log or config.sh" "! grep -q fake-app-key $LIGHT_HOME/lightd.log $LIGHT_CONFIG"
+# lightd end to end: a dark room at 21:30 → the strip comes on warm (4000 K); a clean stop → off.
+: > "$HD/puts.log"; state_set hue_on ""
+printf 'LUX_SOURCE=direct\nSENSOR_URL=http://127.0.0.1:18077/events\nTIME_OF_DAY=1\n' >> "$LIGHT_CONFIG"
+python3 test/fake_sensor.py 18077 0.2 0.5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+LIGHT_TZ=Europe/Berlin LIGHT_CLOCK=290:1290:+0200 bin/lightd & DPID=$!; sleep 4; stop_d $DPID; kill $SP 2>/dev/null
+check "lightd + Hue: a dark room at 21:30 turns the strip on at 4000 K (mirek 250); a clean stop turns it off" \
+    "grep -q '\"on\":{\"on\":true}.*\"mirek\":250' $HD/puts.log && tail -n 1 $HD/puts.log | grep -q '\"on\":{\"on\":false}'" "$(cat $HD/puts.log)"
+kill $HP 2>/dev/null; unset HUE_SCHEME
 
 echo
 echo "$PASS passed, $FAIL failed"

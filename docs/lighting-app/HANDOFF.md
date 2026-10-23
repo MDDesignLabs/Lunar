@@ -134,6 +134,17 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
   - **Watch:** short display sleeps each cost a wake reapply (brightness plus 3 gain writes). Fine at today's counts; if a day nears the cap, make the wake reapply read the monitor first (`m1ddc get`) and write only what differs.
   - **Open, ESP32 Wi-Fi:** dropouts and ~33 % ping loss (Setup facts). The likely fix is `wifi: power_save_mode: none` in the sensor's ESPHome YAML (a reflash; ask the user first).
 
+## Bias light: Hue strip chosen (2026-10-23)
+
+- **The Govee test:** LAN Control worked (`bin/govee discover`: H6056 at 192.168.0.28, one device for both bars) and the bars could be controlled. But on the wide 1500R screen the light spread to the sides unevenly. **Decision:** the Hue Play Gradient Lightstrip for PC 32–34″ + a Hue Bridge (BUY_BIAS_STRIP.md); return the Govee.
+- **Built:** the Hue backend (FR-68): `lib/hue.sh`, `bin/hue` (discover, pair, lights, use, status, on/off, brightness, kelvin); `light status` and `light bias` work with either backend. Tested against a fake bridge (shell §14).
+- **When the strip arrives:**
+  1. Set it up in the Hue app (strip on the bridge, bridge on the router by Ethernet).
+  2. `cd ~/lunar-lighting && lighting-prototype/bin/light update`.
+  3. Press the bridge's link button, then `lighting-prototype/bin/hue pair <bridge-ip>` (the IP is in the Hue app: Settings → Bridges → (i)).
+  4. `launchctl kickstart -k gui/$(id -u)/com.lighting.lightd`; `light status` should show `bias: on … → Hue bridge …`.
+- **Still to do:** a Hue variant of probe 07's wall calibration (check F) and its flicker check (I). Until then the level is the 5 % fallback.
+
 ## Govee arrived (2026-10-13)
 
 The H6056 bars are here. The shell fixes are in (P0b-T02, T03, T05, T06; untested on hardware). The user's steps, in order:

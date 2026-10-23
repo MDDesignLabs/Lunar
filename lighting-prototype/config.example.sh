@@ -123,3 +123,10 @@ BIAS_IN_CRITICAL=on               # colour-critical override: on = 6500 K at the
 BIAS_REFRESH=60                   # while on, resend brightness + Kelvin this often (UDP has no ack); never `turn 1`
 GOVEE_MIN_INTERVAL=2              # seconds: at most one update this often (changes in between are coalesced)
 GOVEE_GAP_MS=300                  # between datagrams to one bar (RESEARCH_08 section 3; 200 ms was UNVERIFIED)
+# Philips Hue bias light (SPEC FR-68), e.g. the Hue Play Gradient Lightstrip for PC 32–34″.
+# `bin/hue pair <bridge-ip>` saves HUE_BRIDGE and HUE_LIGHT in ~/.lighting/config.sh and the key
+# in ~/.lighting/hue_key. When HUE_BRIDGE is set, Hue is the bias light and GOVEE_IPS is ignored.
+HUE_BRIDGE=""
+HUE_LIGHT=""
+HUE_MIN_INTERVAL=1                # seconds between updates (the bridge takes ~10/s per light)
+HUE_FADE_MS=2000                  # every change fades this long, done by the bridge

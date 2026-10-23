@@ -1,5 +1,7 @@
 # Compute targets from a filtered lux value and push them to hardware.
 # Sourced after common.sh, ddc.sh and govee.sh. Used by both lightd and `light`.
+# The bias-light backend switch (bias_*) lives in hue.sh; load it if the caller didn't.
+command -v bias_backend >/dev/null 2>&1 || . "$PROTO_DIR/lib/hue.sh"
 
 current_mode() { state_get mode adaptive; }
 
@@ -61,8 +63,8 @@ EOF
     fi
     # Bias light (FR-61–FR-64). bias is the strip %, 0 = off (bright room, or the override with
     # BIAS_IN_CRITICAL=off); bias_k is the screen's target K clamped to 2200–6500, or 6500
-    # in the override. Display sleep and exit are handled in lightd. GOVEE_IPS="" skips it all.
-    if [ -n "$GOVEE_IPS" ]; then
+    # in the override. Display sleep and exit are handled in lightd. No bias light set skips it all.
+    if bias_set; then
         if [ -n "$bias_room" ] && [ "$bias_room" != "$(state_get bias_room '')" ]; then
             state_set bias_room "$bias_room"     # the hysteresis memory (engine reads it back)
             if [ "$bias_room" = 0 ]; then log "bias: room above ${BIAS_OFF_LUX} lx: off (the room already lights the wall)"
@@ -70,9 +72,9 @@ EOF
         fi
         if [ "$bias_cal" = 0 ] && [ "$(state_get bias_uncal_logged 0)" != 1 ]; then
             state_set bias_uncal_logged 1
-            log "bias: not calibrated yet (BIAS_CAL is empty): using ${BIAS_FALLBACK_PCT}% (UNVERIFIED). Run probe/07-govee.sh check F"
+            log "bias: not calibrated yet (BIAS_CAL is empty): using ${BIAS_FALLBACK_PCT}% (UNVERIFIED). Calibrate the wall (Govee: probe/07-govee.sh check F)"
         fi
-        govee_apply "$bias" "$bias_k" "$force"
+        bias_apply "$bias" "$bias_k" "$force"
     fi
 
     state_set target "kelvin=$kelvin brightness=$brightness gains=$red/$green/$blue bias=$bias mode=$mode"

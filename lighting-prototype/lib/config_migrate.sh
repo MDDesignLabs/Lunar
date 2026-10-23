@@ -43,7 +43,7 @@ EOF
 
 # Machine-specific measurements (probe 07 saves them with a dated comment). Never removed,
 # even when a value happens to equal a default.
-CM_MEASURED_KEYS="GOVEE_IPS BIAS_CAL BIAS_WALL_RHO"
+CM_MEASURED_KEYS="GOVEE_IPS BIAS_CAL BIAS_WALL_RHO HUE_BRIDGE HUE_LIGHT"
 
 # The parser, the classifier and the rewriter, in one awk program (POSIX awk: macOS and Linux).
 # Files: 1 = known values (TSV), 2 and 3 = the config (read twice: pass 1 finds each key's last

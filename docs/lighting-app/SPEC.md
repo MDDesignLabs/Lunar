@@ -187,6 +187,13 @@ Each requirement is individually testable. TEST_PLAN §7 traces them.
 - **FR-65** Rate limits: coalesce to the latest target; send only on a change of ≥ 1 brightness step or ≥ 100 K; ≤ 1 update per 2 s; ≥ 300 ms between datagrams to one device; on/off transitions sent twice, 300 ms apart. [R08 §3]
 - **FR-66** Refresh the current state every 60 s (UDP has no ack), **without** resending `turn 1`, so bars you switched off in the Govee app stay off.
 - **FR-67** Reachability: poll `devStatus` with each refresh; after 3 consecutive refreshes without a reply, show "Bias light not responding" and keep trying. (The threshold of 3 is a design choice, not a measured value.)
+- **FR-68** Hue backend (added 2026-10-23; the user chose the Hue Play Gradient Lightstrip for PC 32–34″ over the Govee bars, which spread unevenly on the wide 1500R screen).
+  - **Transport:** the Hue Bridge's local CLIP v2 REST API: `PUT /clip/v2/resource/light/<id>` with the `hue-application-key` header, HTTPS with `-k` on the LAN.
+  - **Pairing and backend choice:** the key comes from `bin/hue pair` (link button) and is stored in `~/.lighting/hue_key` (mode 600), never in config.sh. `HUE_BRIDGE` set → Hue is the bias light and `GOVEE_IPS` is ignored.
+  - **Level and colour:** the same level, Kelvin and off rules as FR-61–FR-64. Kelvin → mirek, clamped 153–500.
+  - **Sending:** only on a change of ≥ 1 % or ≥ 100 K; ≤ 1 update/s (`HUE_MIN_INTERVAL`); fades of `HUE_FADE_MS` done by the bridge; "on" only on our own off→on transition. Each PUT is acknowledged, so there's no blind refresh.
+  - **Reachability (FR-67):** 3 failed PUTs → "bias light not responding" once, then keep trying.
+  - **Calibration:** `BIAS_CAL` for Hue isn't measured yet; the fallback % applies until a Hue variant of probe 07 check F exists. [shell §14]
 
 ### Desk light bar (added 2026-10-11 from R08 §6)
 

@@ -7,7 +7,7 @@
 #   light offset <n>               set the nudge directly (0 clears it)
 #   light kelvin <K>               write the gains for K right now (manual / testing)
 #   light neutral                  write calibrated neutral gains once (panic button)
-#   light bias <pct|off> [K]       drive the Govee bars directly (0 or off = turn 0; K clamped 2200–6500)
+#   light bias <pct|off> [K]       drive the bias light directly, Hue or Govee (0 or off = off; K clamped 2200–6500)
 #   light status                   mode, lux, targets, today's write counts
 #   light writes [n]               last n DDC writes (default 20)
 #   light report [YYYY-MM-DD]      one day's summary (lux, brightness, colour, events) to paste for review
@@ -24,6 +24,7 @@ fi
 . "$(dirname "$0")/../lib/common.sh"
 . "$PROTO_DIR/lib/ddc.sh"
 . "$PROTO_DIR/lib/govee.sh"
+. "$PROTO_DIR/lib/hue.sh"
 . "$PROTO_DIR/lib/apply.sh"
 
 lf_now() { state_get filtered "2"; }   # 2 = 100 lux, used only if the daemon has never run
@@ -111,9 +112,8 @@ case "$1" in
     bias)
         p="$2"; [ "$p" = off ] && p=0
         case "$p" in ''|*[!0-9]*) echo "usage: light bias <pct|off> [K]" >&2; exit 64 ;; esac
-        govee_apply "$p" "${3:-6500}" 1
-        if [ "$p" = 0 ]; then echo "bias off → ${GOVEE_IPS:-<no GOVEE_IPS set>}"
-        else echo "bias $(state_get govee_pct "$p")% $(state_get govee_k "${3:-6500}")K → ${GOVEE_IPS:-<no GOVEE_IPS set>}"; fi
+        bias_apply "$p" "${3:-6500}" 1
+        echo "bias $(bias_state) → $(bias_where)"
         ;;
     status)
         m="$(current_mode)"; [ "$m" = critical ] && [ "$(state_get critical_rc 0)" != 0 ] && m="critical (INCOMPLETE: gains not neutral yet)"
@@ -127,11 +127,11 @@ case "$1" in
         else
             echo "clock:     off (TIME_OF_DAY=0: the room light alone sets the white point)"
         fi
-        if [ -n "$GOVEE_IPS" ]; then
-            case "$(state_get govee_on '')" in
-                1) b="on $(state_get govee_pct '?')% $(state_get govee_k '?')K" ;; 0) b=off ;; *) b=unknown ;; esac
-            [ -n "$BIAS_CAL" ] || b="$b (BIAS_CAL not measured: fallback ${BIAS_FALLBACK_PCT}%; run probe/07-govee.sh)"
-            echo "bias:      $b → $GOVEE_IPS"
+        if bias_set; then
+            b="$(bias_state)"
+            [ -n "$BIAS_CAL" ] || b="$b (BIAS_CAL not measured: fallback ${BIAS_FALLBACK_PCT}%)"
+            [ "$(bias_backend)" = hue ] && [ "$(state_get hue_fails 0)" -ge 3 ] && b="$b (NOT RESPONDING)"
+            echo "bias:      $b → $(bias_where)"
         fi
         echo "last sent: brightness=$(state_get last_brightness -) gains=$(state_get last_red -)/$(state_get last_green -)/$(state_get last_blue -)"
         printf 'today:     '

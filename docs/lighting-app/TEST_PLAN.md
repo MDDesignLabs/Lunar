@@ -3,7 +3,7 @@
 Status: draft, 2026-09-26. The requirements (FR-/NFR-/US-) are defined in SPEC.md, and the task IDs in BUILD_PLAN.md.
 
 **What exists today:**
-- `lighting-prototype/test/run_tests.sh`: **202 checks, all passing**, against simulators (2026-10-23, after the dropout clock tick, §13, and the report's log collapsing, §11: 200 before, after the report's lightd/clock lines, §11: 198 before that, after the time of day, §13: 180 before that, after the bias light, §12: 131 before that, after `light update` and the config migration, §10: 110 before that, 97 before the RESEARCH_07 defaults and probe 08, 63 before the 2026-09-26 review fixes). Two checks (discovery over real multicast, §3 and §12) print SKIP instead where the machine has no multicast route, so the total there is 200. Where 127.0.0.2 can't be bound (macOS without a loopback alias), §12 uses one fake light and skips three more discovery checks. The full run takes about 6 minutes. The §12 checks weren't mutation-tested. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
+- `lighting-prototype/test/run_tests.sh`: **218 checks, all passing**, against simulators (2026-10-23, after the Hue backend, §14, 16 checks against a fake bridge: 202 before, after the dropout clock tick, §13, and the report's log collapsing, §11: 200 before, after the report's lightd/clock lines, §11: 198 before that, after the time of day, §13: 180 before that, after the bias light, §12: 131 before that, after `light update` and the config migration, §10: 110 before that, 97 before the RESEARCH_07 defaults and probe 08, 63 before the 2026-09-26 review fixes). Two checks (discovery over real multicast, §3 and §12) print SKIP instead where the machine has no multicast route, so the total there is 216. Where 127.0.0.2 can't be bound (macOS without a loopback alias), §12 uses one fake light and skips three more discovery checks. The full run takes about 6 minutes. The §12 checks weren't mutation-tested. The checks added in the 2026-09-26 review rounds and the 2026-10-11 hardware fixes were confirmed by reintroducing the bug each targets and seeing the suite fail. The probe 08 checks weren't mutation-tested, except the Part B small-spill check, which fails under the old 20% rule. Only one run at a time: the suite refuses to start while another is running, because the fake devices use fixed ports. These are:
   - a fake ESPHome SSE sensor (`test/fake_sensor.py`);
   - fake Govee lights on real UDP sockets (`test/fake_govee.py`: several addresses, a reply without `ip`, one that ignores multicast, a state model), and a fake TSL2591 on the wall that they light (`test/fake_wall_sensor.py`);
   - a simulated AOC + TSL2591 that responds to gain writes (`test/fake_screen_sensor.py`);
@@ -191,6 +191,16 @@ Temp dirs, a temp bare repo and clone, a temp `HOME` (no git identity, no launch
 | I-G27 | Probe 07 exit | Each light back as found; no Kelvin outside the probe's own list | — |
 
 ---
+
+### Hue bias light (shell §14, added 2026-10-23, FR-68)
+
+| ID | Case | Expected |
+|---|---|---|
+| I-H01 | `bin/hue pair` | Waits for the link button; key in `~/.lighting/hue_key` (mode 600), never in config.sh or the log; `HUE_BRIDGE` saved, and `HUE_LIGHT` set to the gradient strip |
+| I-H02 | Backend choice | `HUE_BRIDGE` set → Hue even with `GOVEE_IPS`; neither → nothing is sent |
+| I-H03 | Level and Kelvin | Coming on is one PUT (on + brightness + mirek); no PUT for no change or < 100 K; a 1 % change sends brightness only; mirek 6500 K → 154, 4000 K → 250, clamped 153–500 |
+| I-H04 | Off, rate limit, failures | 0 % → off, once; ≤ 1 update per `HUE_MIN_INTERVAL`, the latest sent by `hue_tick`; 3 failures → "not responding" once and NOT RESPONDING in `light status`; recovery logged |
+| I-H05 | lightd end to end | Dark room at 21:30 → strip on at 4000 K; a clean stop → off |
 
 ## 3. Hardware tests: the probe kit
 

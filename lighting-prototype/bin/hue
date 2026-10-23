@@ -1,0 +1,107 @@
+#!/bin/bash
+# hue: set up and test the Philips Hue bias light (Hue Bridge, local CLIP v2 API).
+#
+#   hue discover               find the bridge's IP (Philips' discovery lookup); or read it in the
+#                              Hue app: Settings → Bridges → your bridge → (i)
+#   hue pair <bridge-ip>       press the bridge's round link button, then run this within 30 s.
+#                              Saves the key (~/.lighting/hue_key, mode 600) and HUE_BRIDGE, and
+#                              HUE_LIGHT when there's one obvious strip
+#   hue lights                 list the bridge's lights (id, name, gradient)
+#   hue use <light-id>         make that light the bias light (saves HUE_LIGHT)
+#   hue status                 the bias light's state, as the bridge reports it
+#   hue on|off                 switch the bias light
+#   hue brightness <1-100>     set its brightness %
+#   hue kelvin <K>             set its white (2000–6500 K)
+#
+# Nothing here needs the cloud except `discover`, and only to find the IP.
+
+. "$(dirname "$0")/../lib/common.sh"
+. "$PROTO_DIR/lib/hue.sh"
+. "$PROTO_DIR/lib/config_migrate.sh"
+
+need() { [ -n "$HUE_BRIDGE" ] && [ -n "$(hue_key)" ] || { echo "not paired yet: run  hue pair <bridge-ip>" >&2; exit 1; }; }
+need_light() { need; [ -n "$HUE_LIGHT" ] || { echo "no bias light chosen: run  hue lights  then  hue use <id>" >&2; exit 1; }; }
+
+lights_json() { hue_req GET /clip/v2/resource/light; }
+# id<TAB>name<TAB>gradient(yes/no), one per line
+lights_tsv() {
+    lights_json | python3 -c 'import json, sys
+try: d = json.load(sys.stdin).get("data", [])
+except Exception: sys.exit(1)
+for l in d:
+    print("%s\t%s\t%s" % (l.get("id", "?"), l.get("metadata", {}).get("name", "?"), "yes" if "gradient" in l else "no"))'
+}
+
+case "$1" in
+    discover)
+        out="$(curl -s -m 5 https://discovery.meethue.com/ 2>/dev/null)"
+        ips="$(echo "$out" | python3 -c 'import json, sys
+try:
+    for b in json.load(sys.stdin): print(b.get("internalipaddress", ""))
+except Exception: pass' 2>/dev/null)"
+        if [ -n "$ips" ]; then echo "Hue bridge(s) on your network: $ips"; echo "Next: press the bridge's link button, then  hue pair <ip>"
+        else echo "not found by Philips' lookup. Read the IP in the Hue app: Settings → Bridges → your bridge → (i)"; exit 1; fi
+        ;;
+    pair)
+        ip="$2"; case "$ip" in ''|*[!0-9.a-zA-Z:-]*) echo "usage: hue pair <bridge-ip>" >&2; exit 64 ;; esac
+        HUE_BRIDGE="$ip"
+        echo "Press the round link button on the bridge now (waiting up to 30 s)…"
+        key=""
+        for i in $(seq 1 30); do
+            r="$(curl -sk -m 3 -X POST -d '{"devicetype":"lunar_lighting#mac"}' "$(hue_url /api)" 2>/dev/null)"
+            key="$(echo "$r" | python3 -c 'import json, sys
+try:
+    for x in json.load(sys.stdin):
+        if "success" in x: print(x["success"]["username"])
+except Exception: pass' 2>/dev/null)"
+            [ -n "$key" ] && break
+            sleep 1
+        done
+        [ -n "$key" ] || { echo "no key: the link button wasn't pressed in time, or $ip isn't a Hue bridge (reply: ${r:-none})" >&2; exit 1; }
+        kf="$(hue_key_file)"; mkdir -p "$(dirname "$kf")"; ( umask 077; printf '%s' "$key" > "$kf" ); chmod 600 "$kf"
+        config_save_key HUE_BRIDGE "$ip" "paired by bin/hue" >/dev/null
+        echo "paired with $ip (key saved to $kf)"
+        tsv="$(lights_tsv)"
+        n_grad="$(echo "$tsv" | awk -F'\t' '$3 == "yes"' | grep -c .)"
+        n_all="$(echo "$tsv" | grep -c .)"
+        pick=""
+        [ "$n_grad" = 1 ] && pick="$(echo "$tsv" | awk -F'\t' '$3 == "yes" { print $1 }')"
+        [ -z "$pick" ] && [ "$n_all" = 1 ] && pick="$(echo "$tsv" | cut -f1)"
+        if [ -n "$pick" ]; then
+            config_save_key HUE_LIGHT "$pick" "chosen by bin/hue pair" >/dev/null
+            echo "bias light: $(echo "$tsv" | awk -F'\t' -v id="$pick" '$1 == id { print $2 }') ($pick)"
+            echo "Restart lightd to use it:  launchctl kickstart -k gui/\$(id -u)/com.lighting.lightd"
+        else
+            echo "lights on this bridge:"; echo "$tsv" | awk -F'\t' '{ printf "  %s  %s%s\n", $1, $2, ($3 == "yes") ? "  (gradient)" : "" }'
+            echo "choose the strip:  hue use <id>"
+        fi
+        ;;
+    lights)
+        need; lights_tsv | awk -F'\t' '{ printf "%s  %s%s\n", $1, $2, ($3 == "yes") ? "  (gradient)" : "" }'
+        ;;
+    use)
+        need; case "$2" in ''|*[!0-9a-f-]*) echo "usage: hue use <light-id>" >&2; exit 64 ;; esac
+        lights_tsv | cut -f1 | grep -qx "$2" || { echo "no light $2 on this bridge (see: hue lights)" >&2; exit 1; }
+        config_save_key HUE_LIGHT "$2" "chosen by bin/hue use" >/dev/null
+        echo "bias light: $2. Restart lightd:  launchctl kickstart -k gui/\$(id -u)/com.lighting.lightd"
+        ;;
+    status)
+        need_light
+        hue_req GET "/clip/v2/resource/light/$HUE_LIGHT" | python3 -c 'import json, sys
+try: l = json.load(sys.stdin)["data"][0]
+except Exception: print("no reply from the bridge"); sys.exit(1)
+on = l.get("on", {}).get("on"); b = l.get("dimming", {}).get("brightness"); m = l.get("color_temperature", {}).get("mirek")
+print("%s  %s  brightness %s%%  %s" % (l.get("metadata", {}).get("name", "?"), "on" if on else "off", b, ("%dK" % round(1e6 / m)) if m else "colour mode"))'
+        ;;
+    on)  need_light; hue_put '{"on":{"on":true}}' && echo on ;;
+    off) need_light; hue_put '{"on":{"on":false}}' && echo off ;;
+    brightness)
+        need_light; case "$2" in ''|*[!0-9]*) echo "usage: hue brightness <1-100>" >&2; exit 64 ;; esac
+        hue_put '{"dimming":{"brightness":'"$2"'}}' && echo "brightness $2%"
+        ;;
+    kelvin)
+        need_light; case "$2" in ''|*[!0-9]*) echo "usage: hue kelvin <K>" >&2; exit 64 ;; esac
+        hue_put '{"color_temperature":{"mirek":'"$(hue_mirek "$2")"'}}' && echo "${2}K (mirek $(hue_mirek "$2"))"
+        ;;
+    *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 64 ;;
+esac
