@@ -598,6 +598,11 @@ check "…and counts your nudges (light brighter is logged as a user action)" "e
 check "light report rejects a malformed date" "! bin/light report 12-10-2026 >/dev/null 2>&1"
 check "light report says whether lightd is running (stopped here → NOT RUNNING) and that time of day is off (TIME_OF_DAY=0)" \
     "echo \"\$rep\" | grep -q '^lightd: NOT RUNNING' && echo \"\$rep\" | grep -q '^clock:  time of day OFF'"
+for i in 1 2 3; do echo "$(today) 21:2$i:00 sensor: no data for 60s; holding outputs, reconnecting in 30s" >> "$LIGHT_HOME/lightd.log"; done
+rep_c="$(bin/light report 2>&1)"
+check "light report collapses a run of the same message into one line (×3), keeping the other events" \
+    "echo \"\$rep_c\" | grep -q '21:21:00–21:23:00 sensor: no data for 60s; holding outputs, reconnecting in 30s  (×3)' && echo \"\$rep_c\" | grep -q 'lightd start'" \
+    "$(echo "$rep_c" | sed -n '/-- Events/,$p')"
 echo TIME_OF_DAY=1 >> "$LIGHT_CONFIG"
 rep_on="$(LIGHT_TZ=Europe/Berlin bin/light report 2026-10-19 2>&1)"
 check "…and with TIME_OF_DAY=1 it shows the day's sunset (Berlin, 19 Oct ≈ 18:0x)" \
@@ -853,6 +858,20 @@ done
 check "lightd at noon in a dark room: the clock check ran (tod_warm 6500), no warm gains sent" "[ '$tw_noon' = '6500|0' ]" "$tw_noon"
 check "lightd at 21:30 in the same room: tod_warm 4000, and a warm blue gain was sent" \
     "case '$tw_night' in 4000\|0) false ;; 4000\|*) true ;; *) false ;; esac" "$tw_night"
+# Sensor offline (2026-10-22): the clock must still move the white point, using the last lux.
+fresh "LUX_SOURCE=direct GOVEE_IPS= SENSOR_URL=http://127.0.0.1:18095/events TIME_OF_DAY=1 STALE_SECS=2"
+python3 test/fake_sensor.py 18095 0.2 0.5 & SP=$!; PIDS="$PIDS $SP"; sleep 0.5
+LIGHT_CLOCK=290:1290:+0200 bin/lightd & DPID=$!; sleep 3
+kill $SP 2>/dev/null; wait $SP 2>/dev/null; sleep 1
+state_set() { printf '%s' "$2" > "$LIGHT_HOME/state/$1"; }
+state_set tod_warm 1234                 # as if the clock had moved since the last reading
+b0="$(calls 'set blue')"
+for i in 1 2 3 4 5 6 7 8; do [ "$(cat $LIGHT_HOME/state/tod_warm)" = 4000 ] && break; sleep 1; done
+kill -TERM $DPID; wait $DPID 2>/dev/null
+check "sensor offline: lightd still re-applies when the clock moves (tod_warm back to 4000, logged once)" \
+    "[ \"\$(cat $LIGHT_HOME/state/tod_warm)\" = 4000 ] && [ \$(grep -c 'sensor offline: the clock still moves' $LIGHT_HOME/lightd.log) = 1 ]" \
+    "tod_warm=$(cat $LIGHT_HOME/state/tod_warm); $(grep -c 'sensor offline' $LIGHT_HOME/lightd.log) log lines"
+unset -f state_set; . lib/common.sh
 unset LIGHT_TZ
 
 echo

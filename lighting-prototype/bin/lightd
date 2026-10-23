@@ -113,7 +113,7 @@ find "$LIGHT_HOME" -maxdepth 1 -name 'samples-*.csv' -mtime +30 -exec rm -f {} +
 
 prev_lf="$(state_get filtered "")"
 acted_lf="$(state_get acted "")"
-tod_t=0
+tod_t=0; tod_offline_logged=0
 acted_mode=""
 disp_was_asleep=0
 [ -x "$DISPLAY_STATE" ] || log "no display-state helper at $DISPLAY_STATE: display sleep while the Mac is awake goes unnoticed (run probe/00-setup.sh)"
@@ -130,7 +130,7 @@ while true; do
         # Numbers only. A negative value (Lunar's -1 without Pro) is "no reading", not darkness.
         case "$lux" in ''|-*|*[!0-9.eE+-]*) continue ;; esac
         case "$lux" in *[0-9]*) ;; *) continue ;; esac
-        got_any=1; backoff=1
+        got_any=1; backoff=1; tod_offline_logged=0
         t="$(now)"; dt=$(( t - last_t )); [ $dt -lt 1 ] && dt=1
         # The first apply after start is like a wake: write the right values now. Otherwise
         # the neutral written on the previous exit would hold the white point at 6500K for
@@ -218,6 +218,19 @@ while true; do
     kill_tree "$STREAM_PID"; STREAM_PID=""
     if [ $got_any = 0 ]; then
         log "sensor: no data for ${STALE_SECS}s; holding outputs, reconnecting in ${backoff}s"
+    fi
+    # Sensor offline: the room light is held at its last value, but the clock still moves the
+    # white point (FR-23). Without this, an evening dropout froze the screen at 5000 K
+    # (2026-10-22, 21:2x). Checked once per reconnect attempt (≤ 30 s apart).
+    if [ "${TIME_OF_DAY:-0}" = 1 ] && [ -n "$prev_lf" ] && [ "$(current_mode)" = adaptive ] \
+        && [ "$(display_state)" != asleep ]; then
+        tod_w="$(tod_info | sed -n 's/^warm_end=//p')"
+        if [ "$tod_w" != "$(state_get tod_warm "")" ]; then
+            state_set tod_warm "$tod_w"
+            [ "$tod_offline_logged" = 1 ] || log "sensor offline: the clock still moves the white point; using the last room light"
+            tod_offline_logged=1
+            apply_targets "$prev_lf" 0
+        fi
     fi
     sleep "$backoff"
     backoff=$(( backoff * 2 )); [ $backoff -gt 30 ] && backoff=30

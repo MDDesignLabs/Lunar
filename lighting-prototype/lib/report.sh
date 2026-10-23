@@ -78,7 +78,17 @@ light_report() {
 
     echo "-- Events (lightd.log)"
     if [ -f "$LIGHT_HOME/lightd.log" ]; then
-        grep "^$day " "$LIGHT_HOME/lightd.log" | cut -c12- | tail -n 40
+        # Runs of the same message (e.g. a long sensor dropout) collapse to one line, so they
+        # can't push the day's other events out of view (2026-10-22: 40 dropout lines hid the start).
+        grep "^$day " "$LIGHT_HOME/lightd.log" | cut -c12- | awk '
+            { t = $1; m = $0; sub(/^[^ ]+ /, "", m) }
+            m == pm { n++; lt = t; next }
+            { flush(); pm = m; ft = t; lt = t; n = 1 }
+            END { flush() }
+            function flush() {
+                if (n == 0) return
+                if (n == 1) print ft " " pm; else print ft "–" lt " " pm "  (×" n ")"
+            }' | tail -n 40
         echo "  ($(grep -c "^$day .*user:" "$LIGHT_HOME/lightd.log") nudges or manual changes by you)"
     else
         echo "  (no lightd.log yet)"

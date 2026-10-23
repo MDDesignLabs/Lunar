@@ -125,6 +125,15 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
   - **Changed:** `light report` now prints whether lightd is running and whether time of day is on (with the day's sunset), so the next review sees both at a glance (shell §11, 200 checks).
   - **Fixed the same day:** the user ran `bin/light update`. `launchctl bootstrap` then gave "5: Input/output error" because the job was already loaded, which is harmless. `light status` confirms the new code: `clock: day`, 6500 K at 5 lx (FR-23 working), Berlin sunrise 07:40 and sunset 18:01. Today's writes so far are brightness 5 and gains 5/7/7, from the update and restarts.
 
+- **2026-10-21 to 23** (pasted 2026-10-23, first days on FR-23):
+  - **Working:** brightness held at 0 % in a 0.1–7 lx room (correct). **6500 K all day in the blackout room** (FR-23 working: the 21st showed 5000 K only before the 10:39 update). 5000 K at 20:0x on the 22nd (sunset 17:59). The morning ramp on the 23rd reached 6500 K by about 08:00. Gains peaked at 10/day (the 21st, with the update, restarts and 5 quick display sleep/wake cycles 09:44–10:00), against a cap of 30. No nudges.
+  - **Sensor dropout, 22nd from ~21:2x** (≥ 24 min, the ESP32's Wi-Fi). Outputs were held, as designed. But the clock ramp froze too, because lightd only checked the clock when a reading arrived, so the screen stayed at 5000 K instead of going to 4000 K. **Fixed:** lightd now re-checks the clock on every reconnect attempt and applies with the last room light (logged once per dropout; shell §13, mutation-checked).
+  - **The report hid events:** 40 repeated dropout lines pushed the 22nd's other events (including lightd's start) out of the 40-line view. **Fixed:** runs of the same message collapse to one line "first–last … (×N)" (§11).
+  - **The 21st, 16:30:** a clean exit with no restart, the same pattern as the 19th (16:36). Probably shutdown or logout at the end of the day; not a fault.
+  - **The 23rd, 07:22:** "previous run did not exit cleanly" (power loss or a forced shutdown overnight). Gains were reset to neutral first, as designed.
+  - **Watch:** short display sleeps each cost a wake reapply (brightness plus 3 gain writes). Fine at today's counts; if a day nears the cap, make the wake reapply read the monitor first (`m1ddc get`) and write only what differs.
+  - **Open, ESP32 Wi-Fi:** dropouts and ~33 % ping loss (Setup facts). The likely fix is `wifi: power_save_mode: none` in the sensor's ESPHome YAML (a reflash; ask the user first).
+
 ## Govee arrived (2026-10-13)
 
 The H6056 bars are here. The shell fixes are in (P0b-T02, T03, T05, T06; untested on hardware). The user's steps, in order:
