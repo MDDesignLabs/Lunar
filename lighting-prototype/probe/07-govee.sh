@@ -295,9 +295,17 @@ if run F; then
         echo "$p,$v,$net" >> "$CSV"
         printf '    %3s %%  → %s lx (net %s)   [%d/%d]\n' "$p" "$v" "$net" "$i" "$nsteps" >&2
     done
-    CAL="$(awk -F, 'NR > 2 { printf "%s%s:%s", (n++ ? "," : ""), $1, $3 }' "$CSV")"
-    record $OUT "F: BIAS_CAL=\"$CAL\"   (wall lux above the dark floor, at ${CAL_K} K; raw: results/07-wall-cal.csv)"
-    save_offer BIAS_CAL "$CAL" "probe 07 check F, ${CAL_K} K, floor ${FLOOR} lx" && BIAS_CAL="$CAL"
+    # Only steps with a real reading. A sensor that gave nothing (offline, not on the wall)
+    # left "1:,2:,…" in the config on 2026-11-06: never offer that again.
+    CAL="$(awk -F, 'NR > 2 && $2 ~ /^[0-9.]+$/ && $3 ~ /^[0-9.]+$/ { printf "%s%s:%s", (n++ ? "," : ""), $1, $3 }' "$CSV")"
+    ncal="$(echo "$CAL" | tr ',' '\n' | grep -c ':')"
+    if [ "$ncal" -lt 2 ] || ! echo "$CAL" | tr ',' '\n' | awk -F: '$2 + 0 > 0 { ok = 1 } END { exit !ok }'; then
+        record $OUT "F: NOT SAVED: the sensor gave no usable wall readings ($ncal steps). Check it's online (bin/light status) and flat on the wall, then rerun: probe/07-govee.sh --only F"
+        CAL=""
+    else
+        record $OUT "F: BIAS_CAL=\"$CAL\"   (wall lux above the dark floor, at ${CAL_K} K; raw: results/07-wall-cal.csv)"
+        save_offer BIAS_CAL "$CAL" "probe 07 check F, ${CAL_K} K, floor ${FLOOR} lx" && BIAS_CAL="$CAL"
+    fi
 fi
 
 # ── R: wall reflectance ──
