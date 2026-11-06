@@ -160,6 +160,7 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
   2. `cd ~/lunar-lighting && lighting-prototype/bin/light update`.
   3. Press the bridge's link button, then `lighting-prototype/bin/hue pair <bridge-ip>` (the IP is in the Hue app: Settings → Bridges → (i)).
   4. `launchctl kickstart -k gui/$(id -u)/com.lighting.lightd`; `light status` should show `bias: on … → Hue bridge …`.
+- **2026-11-06:** the user returned the Govee bars. They run `bin/govee forget` (removes GOVEE_IPS and BIAS_CAL, backup first, keeps BIAS_WALL_RHO 0.55, which is the wall's, not the bars') and restart lightd. Until the Hue strip is paired there's no bias light.
 - **Still to do:** a Hue variant of probe 07's wall calibration (check F) and its flicker check (I). Until then the level is the 5 % fallback.
 
 ## Govee arrived (2026-10-13)

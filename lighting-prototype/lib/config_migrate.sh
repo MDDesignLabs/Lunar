@@ -232,6 +232,26 @@ config_migrate() {  # [config]
 # config. Replaces the last line that assigns KEY when that's a one-line assignment, else appends
 # (the last assignment wins in shell). No other line is touched. Backs up first, as config_migrate
 # does. For probe results (probe 07: GOVEE_IPS, BIAS_CAL, BIAS_WALL_RHO), which config_migrate keeps.
+# config_remove_key <KEY>...: delete every one-line assignment of these keys from the user's
+# config (e.g. GOVEE_IPS after the bars went back). Backs up first; no other line is touched.
+config_remove_key() {
+    local cfg backup base tmp n=1 k pat=""
+    for k in "$@"; do
+        case "$k" in ''|[0-9]*|*[!A-Za-z0-9_]*) echo "config_remove_key: bad key '$k'" >&2; return 1 ;; esac
+        pat="${pat:+$pat|}$k"
+    done
+    cfg="$(cm_config_path)"
+    [ -s "$cfg" ] && grep -Eq "^[ \t]*($pat)=" "$cfg" || { echo "nothing to remove: none of $* is in $cfg"; return 0; }
+    base="$cfg.bak-$(date +%Y%m%d-%H%M%S)"; backup="$base"
+    while [ -e "$backup" ]; do n=$(( n + 1 )); backup="$base-$n"; done
+    cp -p "$cfg" "$backup" || { echo "config_remove_key: could not back up $cfg; nothing changed" >&2; return 1; }
+    tmp="$cfg.rm.$$"; cp -p "$cfg" "$tmp" || return 1
+    grep -Ev "^[ \t]*($pat)=" "$cfg" > "$tmp"
+    mv "$tmp" "$cfg" || return 1
+    cm_log "config: removed $* (backup $backup)"
+    echo "Removed $* from $cfg (backup: $backup)"
+}
+
 config_save_key() {
     local key="$1" val="$2" note="${3:-measured by probe 07}" cfg backup="" base tmp line n=1
     case "$key" in ''|[0-9]*|*[!A-Za-z0-9_]*) echo "config_save_key: bad key '$key'" >&2; return 1 ;; esac

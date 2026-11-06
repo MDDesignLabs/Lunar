@@ -934,6 +934,14 @@ LIGHT_TZ=Europe/Berlin LIGHT_CLOCK=290:1290:+0200 bin/lightd & DPID=$!; sleep 4;
 check "lightd + Hue: a dark room at 21:30 turns the strip on at 4000 K (mirek 250); a clean stop turns it off" \
     "grep -q '\"on\":{\"on\":true}.*\"mirek\":250' $HD/puts.log && tail -n 1 $HD/puts.log | grep -q '\"on\":{\"on\":false}'" "$(cat $HD/puts.log)"
 kill $HP 2>/dev/null; unset HUE_SCHEME
+fresh 'GOVEE_IPS="192.168.0.28"   # found by probe 07
+BIAS_CAL="1:,2:,3:"
+BIAS_WALL_RHO="0.55"'
+cp "$LIGHT_CONFIG" "$TEST_TMP/cfg.forget"
+fo="$(bin/govee forget 2>&1)"
+check "govee forget removes GOVEE_IPS and BIAS_CAL, keeps BIAS_WALL_RHO and every other line, and backs up first" \
+    "! grep -q '^GOVEE_IPS=' $LIGHT_CONFIG && ! grep -q '^BIAS_CAL=' $LIGHT_CONFIG && grep -q '^BIAS_WALL_RHO=\"0.55\"' $LIGHT_CONFIG && grep -q '^OTHER_DDC_APPS=FakeDDCApp' $LIGHT_CONFIG && cmp -s \$(ls $LIGHT_HOME/config.sh.bak-* | head -1) $TEST_TMP/cfg.forget" "$fo"
+check "…and running it again changes nothing" "bin/govee forget | grep -q 'nothing to remove'"
 
 echo
 echo "$PASS passed, $FAIL failed"

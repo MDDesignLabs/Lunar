@@ -10,6 +10,8 @@
 #   govee kelvin <ip> <K>           raw: NOT clamped (lightd clamps to GOVEE_K_MIN..GOVEE_K_MAX)
 #   govee rgb <ip> <r> <g> <b>
 #   govee raw <ip> '<json>'
+#   govee forget                    the bars are gone: remove GOVEE_IPS and their BIAS_CAL from your config
+#                                   (backup first; BIAS_WALL_RHO, the wall's reflectance, is kept)
 
 . "$(dirname "$0")/../lib/common.sh"
 . "$PROTO_DIR/lib/govee.sh"
@@ -40,6 +42,11 @@ for l in sys.stdin:
             r="$(govee_query "$ip" 2)" && echo "$ip  $r" || { echo "$ip  no devStatus reply"; rc=1; }
         done
         exit $rc
+        ;;
+    forget)
+        . "$PROTO_DIR/lib/config_migrate.sh"
+        config_remove_key GOVEE_IPS BIAS_CAL || exit 1
+        echo "Restart lightd:  launchctl kickstart -k gui/\$(id -u)/com.lighting.lightd"
         ;;
     off-all)
         shift
