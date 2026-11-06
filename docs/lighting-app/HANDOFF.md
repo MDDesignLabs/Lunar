@@ -134,6 +134,23 @@ After that, `bin/light update` is the only command needed. It trims `~/.lighting
   - **Watch:** short display sleeps each cost a wake reapply (brightness plus 3 gain writes). Fine at today's counts; if a day nears the cap, make the wake reapply read the monitor first (`m1ddc get`) and write only what differs.
   - **Open, ESP32 Wi-Fi:** dropouts and ~33 % ping loss (Setup facts). The likely fix is `wifi: power_save_mode: none` in the sensor's ESPHome YAML (a reflash; ask the user first).
 
+- **2026-10-30 to 11-05** (pasted 2026-11-06):
+  - **Working as designed:**
+    - brightness 0 % in 0.1–18 lx rooms;
+    - 6500 K all day in the dark room;
+    - the evening ramp from sunset (16:3x–16:4x since DST ended) reaches 5000 K about an hour later; 4000 K from about 21:00; the morning ramp ends at 6500 K about 08:09;
+    - the Govee bars (192.168.0.28, 5 % fallback) follow the screen's Kelvin, and go off and on with display sleep;
+    - the dropout clock tick (2026-10-23 fix) kept the colour ramps going while the sensor was offline. No nudges.
+  - **Main problem, the sensor:** the ESP32 was offline most of the week:
+    - the 30th from 11:28 (with a gap) and from 14:16;
+    - the 2nd from 14:38; the 3rd from 19:25;
+    - all of the 4th, and the 5th from lightd's 10:48 start.
+
+    Brightness can't follow the room while it's offline (held at the last value, 0 %).
+  - **Second problem, DDC failures:** 8 failed on the 3rd and 14 on the 4th, green and blue only, all from the clock ramp while the sensor was offline (20:43, 21:00, 07:27–08:09) and at the 17:50 exit. The monitor most likely wasn't answering (powered off or in standby, while macOS still reported the display awake). Failed writes are retried, not remembered (by design).
+  - **Ask the user:** whether the router or Wi-Fi changed when the Govee was set up (2.4 GHz); to check the ESP32 (`ping lunarsensor.local`, unplug it for 10 s); and whether the AOC is switched off at night. **Likely fix:** ESPHome `wifi: power_save_mode: none` (a reflash).
+  - **Fixed the same day:** probe 07 check F saved `BIAS_CAL="1:,2:,…"` with empty readings (the sensor was offline then too). The engine already ignored it; the probe now refuses to save without real readings.
+
 ## Bias light: Hue strip chosen (2026-10-23)
 
 - **The Govee test:** LAN Control worked (`bin/govee discover`: H6056 at 192.168.0.28, one device for both bars) and the bars could be controlled. But on the wide 1500R screen the light spread to the sides unevenly. **Decision:** the Hue Play Gradient Lightstrip for PC 32–34″ + a Hue Bridge (BUY_BIAS_STRIP.md); return the Govee.
